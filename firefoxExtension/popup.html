@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>PDF Toolbox</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon32.png" alt="" width="24" height="24">
+    <h1>PDF Toolbox</h1>
+    <span id="count" class="pill"></span>
+  </header>
+
+  <main>
+    <ul id="list"></ul>
+    <div id="empty" hidden>
+      <p><strong>Nenhum PDF nesta página.</strong></p>
+      <p class="muted">O que deseja salvar?</p>
+    </div>
+
+    <section id="capture" class="capture">
+      <h2 id="captureTitle">Capturar esta página</h2>
+      <div class="capture-grid">
+        <button data-mode="select" class="cap featured">
+          <span class="cap-icon">✂️</span>
+          <span><b>Selecionar área</b><small>Recorte como no print do Mac · ⌘⇧S</small></span>
+        </button>
+        <button data-mode="pdf" class="cap">
+          <span class="cap-icon">📄</span>
+          <span><b>Página inteira em PDF</b><small>A página toda, dividida em folhas A4</small></span>
+        </button>
+        <button data-mode="png" class="cap">
+          <span class="cap-icon">🖼️</span>
+          <span><b>Página inteira em PNG</b><small>Imagem rolando até o fim</small></span>
+        </button>
+        <button data-mode="visible" class="cap">
+          <span class="cap-icon">🖥️</span>
+          <span><b>Só a área visível</b><small>PNG do que está na tela</small></span>
+        </button>
+      </div>
+      <p id="capStatus" class="cap-status" hidden></p>
+    </section>
+  </main>
+
+  <footer>
+    <button id="openLocal" class="secondary">📂 Abrir PDF do computador</button>
+    <button id="clear" class="link">Limpar lista</button>
+  </footer>
+
+  <script src="popup.js"></script>
+</body>
+</html>

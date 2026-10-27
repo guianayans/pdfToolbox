@@ -77,6 +77,18 @@ Recebeu uma fatura de 9 páginas no e-mail e só precisa de uma? Quer o PDF em i
 
 **Para atualizar:** rode `git pull` (ou baixe de novo), clique em ↻ no card da extensão e recarregue as abas abertas.
 
+### 🦊 Firefox
+
+A versão para Firefox fica na pasta [`firefoxExtension/`](firefoxExtension) (Firefox 128 ou mais novo).
+
+1. Abra `about:debugging#/runtime/this-firefox`.
+2. Clique em **Carregar extensão temporária…** e escolha o arquivo `firefoxExtension/manifest.json`.
+3. Fixe o ícone: clique no 🧩 da barra → ⚙️ ao lado de **PDF Toolbox** → **Fixar na barra**.
+
+Extensões temporárias somem quando o Firefox é fechado. Para deixar instalada de vez, envie a pasta para assinatura gratuita no [addons.mozilla.org](https://addons.mozilla.org/developers/) como **não listada** (você recebe um `.xpi` para instalar), ou use o Firefox Developer Edition com `xpinstall.signatures.required` = `false` em `about:config`.
+
+> A pasta `firefoxExtension/` é gerada a partir do código da raiz. Não a edite à mão: altere os arquivos da raiz e rode `./scripts/build-firefox.sh`.
+
 ## 📖 Como usar
 
 1. Abra um e-mail ou site com um PDF. O ícone da extensão pisca.
@@ -147,6 +159,7 @@ Sem seleção, as ações de converter, dividir, extrair texto e extras valem pa
 ## ⚠️ Limitações conhecidas
 
 - **Comet:** o navegador bloqueia a API `debugger` para extensões. Por isso, "página inteira" é feita rolando e capturando a página em partes, e o **PDF sai como imagem** (texto não selecionável). Para PDF com texto, use `Cmd+P → Salvar como PDF`. No Chrome, o PDF é gerado com o motor nativo e mantém o texto.
+- **Firefox:** não tem a API `debugger`, então funciona como no Comet: "página inteira" é feita por rolagem e o PDF sai como imagem. Se o atalho `Cmd+Shift+S` conflitar com o de captura de tela do Firefox, troque em `about:addons` → ⚙️ → **Gerenciar atalhos de extensões**.
 - **Sites que rolam por dentro de um painel** (o Gmail é um exemplo): "página inteira" captura só a parte visível. Use a seleção de área.
 - **Comprimir** transforma as páginas em imagem.
 - Páginas internas do navegador (`chrome://`, `comet://`, loja de extensões) não podem ser capturadas.

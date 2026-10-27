@@ -1,7 +1,8 @@
 // Service worker: coleta PDFs detectados por aba, atualiza o badge e faz o ícone piscar.
 // Também captura a página (PDF/PNG/área selecionada) quando não há PDF para salvar.
 
-importScripts('lib/pdf-lib.min.js');
+// no Firefox o background é uma página de eventos e o manifest já carrega a lib
+if (typeof importScripts === 'function') importScripts('lib/pdf-lib.min.js');
 
 const ICON_NORMAL = { 16: 'icons/icon16.png', 32: 'icons/icon32.png' };
 const ICON_ALERT = { 16: 'icons/alert16.png', 32: 'icons/alert32.png' };
@@ -159,7 +160,18 @@ function stamp() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}.${p(d.getMinutes())}.${p(d.getSeconds())}`;
 }
 
-const download = (url, filename) => chrome.downloads.download({ url, filename });
+// O Firefox não baixa URLs data:, só blob: (no service worker do Chrome não existe createObjectURL)
+async function download(url, filename) {
+  if (!url.startsWith('data:') || typeof URL.createObjectURL !== 'function') {
+    return chrome.downloads.download({ url, filename });
+  }
+  const blobUrl = URL.createObjectURL(await (await fetch(url)).blob());
+  try {
+    return await chrome.downloads.download({ url: blobUrl, filename });
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  }
+}
 
 async function withDebugger(tabId, fn) {
   const target = { tabId };
@@ -319,6 +331,13 @@ async function startSelection(tabId) {
 async function saveCrop({ format, dataUrl, width, height, title }) {
   const base = `${safeName(title)} recorte ${stamp()}`;
   if (format !== 'pdf') return download(dataUrl, `${base}.${format === 'jpg' ? 'jpg' : 'png'}`);
+  // recorte bem mais alto que uma folha A4 (seleção com rolagem): divide em folhas A4
+  if (height > width * (842 / 595) * 1.25) {
+    const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0);
+    return download(await canvasToPdf(canvas), `${base}.pdf`);
+  }
   // página do PDF no tamanho da área selecionada (1 px CSS = 0,75 pt)
   const doc = await PDFLib.PDFDocument.create();
   const img = await doc.embedPng(dataUrl);
