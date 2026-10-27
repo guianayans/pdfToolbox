@@ -36,32 +36,44 @@ function addItems(tabId, items) {
   });
 }
 
+// O tabId pode não ser uma aba real (páginas pré-carregadas pelo navegador) ou a aba pode
+// ter sido fechada. chrome.action.setIcon reporta isso como "Unchecked runtime.lastError"
+// mesmo com .catch(), então as chamadas usam callback e leem lastError.
+function actionCall(method, details) {
+  return new Promise((resolve) => {
+    if (!chrome.action[method]) return resolve(false);
+    chrome.action[method](details, () => resolve(!chrome.runtime.lastError));
+  });
+}
+
+const tabExists = (tabId) => chrome.tabs.get(tabId).then(() => true, () => false);
+
 async function updateBadge(tabId, count) {
-  try {
-    await chrome.action.setBadgeText({ tabId, text: count ? String(count) : '' });
-    await chrome.action.setBadgeBackgroundColor({ tabId, color: '#E5322D' });
-    await chrome.action.setBadgeTextColor?.({ tabId, color: '#FFFFFF' });
-  } catch {
-    // aba fechada
-  }
+  if (!(await tabExists(tabId))) return;
+  await actionCall('setBadgeText', { tabId, text: count ? String(count) : '' });
+  await actionCall('setBadgeBackgroundColor', { tabId, color: '#E5322D' });
+  await actionCall('setBadgeTextColor', { tabId, color: '#FFFFFF' });
 }
 
 const blinkers = new Map();
-function stopBlink(tabId) {
+function stopBlink(tabId, resetIcon = true) {
   clearInterval(blinkers.get(tabId));
   blinkers.delete(tabId);
-  chrome.action.setIcon({ tabId, path: ICON_NORMAL }).catch(() => {});
-  chrome.action.setBadgeBackgroundColor({ tabId, color: '#E5322D' }).catch(() => {});
+  if (!resetIcon) return;
+  actionCall('setIcon', { tabId, path: ICON_NORMAL });
+  actionCall('setBadgeBackgroundColor', { tabId, color: '#E5322D' });
 }
 
-function blink(tabId) {
-  stopBlink(tabId);
+async function blink(tabId) {
+  stopBlink(tabId, false);
+  if (!(await tabExists(tabId))) return;
+  clearInterval(blinkers.get(tabId)); // outra chamada pode ter começado durante o await
   let on = false;
   let ticks = 0;
-  const timer = setInterval(() => {
+  const timer = setInterval(async () => {
     on = !on;
-    chrome.action.setIcon({ tabId, path: on ? ICON_ALERT : ICON_NORMAL }).catch(() => stopBlink(tabId));
-    chrome.action.setBadgeBackgroundColor({ tabId, color: on ? '#FFAA00' : '#E5322D' }).catch(() => {});
+    if (!(await actionCall('setIcon', { tabId, path: on ? ICON_ALERT : ICON_NORMAL }))) return stopBlink(tabId, false);
+    actionCall('setBadgeBackgroundColor', { tabId, color: on ? '#FFAA00' : '#E5322D' });
     if (++ticks >= 20) stopBlink(tabId);
   }, 450);
   blinkers.set(tabId, timer);
@@ -119,8 +131,20 @@ chrome.webNavigation.onCommitted.addListener((d) => {
   });
 });
 
+// Página pré-carregada ativada: o navegador troca o tabId, então a lista acompanha.
+chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+  stopBlink(removedTabId, false);
+  enqueue(addedTabId, async () => {
+    const items = await getItems(removedTabId);
+    await chrome.storage.session.remove(key(removedTabId));
+    if (!items.length) return;
+    await chrome.storage.session.set({ [key(addedTabId)]: items });
+    await updateBadge(addedTabId, items.length);
+  });
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
-  stopBlink(tabId);
+  stopBlink(tabId, false);
   chrome.storage.session.remove(key(tabId));
 });
 
@@ -257,7 +281,7 @@ async function capturePage(tab, mode) {
       await download(`data:application/pdf;base64,${data}`, `${base}.pdf`);
       return {};
     } catch (e) {
-      console.warn('printToPDF indisponível, usando captura por rolagem', e);
+      console.info('printToPDF indisponível, usando captura por rolagem', e);
     }
     await download(await canvasToPdf(await stitchFullPage(tab)), `${base}.pdf`);
     return { note: NOTE_IMAGE_PDF };
@@ -279,7 +303,7 @@ async function capturePage(tab, mode) {
       await download(`data:image/png;base64,${data}`, `${base}.png`);
       return {};
     } catch (e) {
-      console.warn('captureScreenshot indisponível, usando captura por rolagem', e);
+      console.info('captureScreenshot indisponível, usando captura por rolagem', e);
     }
     const canvas = await stitchFullPage(tab);
     await download(await blobToDataUrl(await canvas.convertToBlob({ type: 'image/png' })), `${base}.png`);
@@ -306,15 +330,28 @@ async function saveCrop({ format, dataUrl, width, height, title }) {
 
 function friendlyError(e) {
   const msg = String(e?.message || e);
-  if (/cannot (access|attach|be scripted)|chrome:\/\/|extensions gallery|webstore|comet:\/\//i.test(msg)) {
-    return 'O navegador não permite capturar esta página (páginas internas ou loja de extensões).';
+  if (/cannot (access|attach|be scripted)|chrome:\/\/|extensions gallery|webstore|comet:\/\/|policy/i.test(msg)) {
+    return 'O navegador não permite extensões nesta página (páginas internas, loja ou sites protegidos pelo navegador).';
   }
   if (/another debugger|already attached/i.test(msg)) return 'Feche o DevTools desta aba e tente de novo.';
   return msg;
 }
 
+// Pelo atalho não há popup para mostrar o erro: sinaliza no ícone por alguns segundos.
+async function flashError(tabId, message) {
+  await actionCall('setBadgeText', { tabId, text: '✕' });
+  await actionCall('setBadgeBackgroundColor', { tabId, color: '#555555' });
+  await actionCall('setTitle', { tabId, title: `PDF Toolbox: ${message}` });
+  setTimeout(async () => {
+    await actionCall('setTitle', { tabId, title: 'PDF Toolbox' });
+    await updateBadge(tabId, (await getItems(tabId)).length);
+  }, 4000);
+}
+
 chrome.commands.onCommand.addListener((command, tab) => {
-  if (command === 'select-area' && tab) startSelection(tab.id).catch(console.error);
+  if (command === 'select-area' && tab) {
+    startSelection(tab.id).catch((e) => flashError(tab.id, friendlyError(e)));
+  }
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

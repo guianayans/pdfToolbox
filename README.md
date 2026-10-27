@@ -47,7 +47,7 @@ Recebeu uma fatura de 9 páginas no e-mail e só precisa de uma? Quer o PDF em i
 ### 📸 Capturar a página (quando não há PDF)
 <img src="docs/popup.png" alt="Popup com as opções de captura" width="300" align="right">
 
-- **✂️ Selecionar área**: arraste um retângulo como no **Cmd+Shift+4** do Mac e salve em **PNG, JPG, PDF** ou **copie** para a área de transferência. Atalho: **Alt+Shift+S**
+- **✂️ Selecionar área**: arraste um retângulo como no **Cmd+Shift+4** do Mac e salve em **PNG, JPG, PDF** ou **copie** para a área de transferência. Atalho: **⌘ Cmd+Shift+S** (Mac) / **Ctrl+Shift+S** (Windows/Linux)
 - **📄 Página inteira em PDF**: a página toda, dividida em folhas A4
 - **🖼️ Página inteira em PNG**: uma imagem única, rolando até o fim
 - **🖥️ Área visível**: PNG do que está na tela

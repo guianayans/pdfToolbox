@@ -123,7 +123,7 @@ async function addSource(buffer, name) {
     libDoc = await PDFDocument.load(bytes, { ignoreEncryption: true, password, updateMetadata: false });
     if (libDoc.isEncrypted) libDoc = null;
   } catch (e) {
-    console.warn('pdf-lib não abriu o arquivo', e);
+    console.info('pdf-lib não abriu o arquivo', e);
   }
   if (!libDoc) toast('Não foi possível descriptografar este PDF: as páginas salvas serão convertidas em imagem.', true);
 
