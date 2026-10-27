@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PDF Toolbox</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="icons/icon32.png" alt="" width="24" height="24"> PDF Toolbox</div>
+    <div class="doc-title" id="docTitle">Nenhum documento</div>
+    <div class="top-actions">
+      <label class="btn secondary">
+        ➕ Adicionar PDF
+        <input type="file" id="fileInput" accept="application/pdf,.pdf" multiple hidden>
+      </label>
+    </div>
+  </header>
+
+  <div class="layout">
+    <main id="stage">
+      <div id="dropzone" class="dropzone">
+        <div class="drop-inner">
+          <div class="big-icon">📄</div>
+          <h2>Arraste PDFs aqui</h2>
+          <p>ou use “Adicionar PDF”. Tudo é processado localmente no seu navegador.</p>
+        </div>
+      </div>
+      <div id="loading" class="loading" hidden>
+        <div class="spinner"></div>
+        <p id="loadingText">Carregando PDF…</p>
+      </div>
+      <div id="selectionBar" class="selection-bar" hidden>
+        <span id="selInfo"></span>
+        <span class="hint">Clique para selecionar · Shift+clique seleciona intervalo · Arraste para reordenar · Duplo clique para ampliar</span>
+      </div>
+      <div id="grid" class="grid"></div>
+    </main>
+
+    <aside class="tools" id="tools">
+      <section>
+        <h3>Seleção</h3>
+        <div class="row">
+          <button class="btn small" data-sel="all">Todas</button>
+          <button class="btn small" data-sel="none">Nenhuma</button>
+          <button class="btn small" data-sel="invert">Inverter</button>
+        </div>
+        <div class="row">
+          <input id="rangeInput" type="text" placeholder="Ex.: 1-3, 5, 8">
+          <button class="btn small" id="applyRange">Selecionar</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Organizar</h3>
+        <div class="row">
+          <button class="btn small" id="rotLeft" title="Girar à esquerda">↺ Girar</button>
+          <button class="btn small" id="rotRight" title="Girar à direita">↻ Girar</button>
+          <button class="btn small danger" id="delSel">🗑 Excluir</button>
+        </div>
+        <div class="row">
+          <button class="btn small" id="reverse">⇅ Inverter</button>
+          <button class="btn small" id="undo">↶ Desfazer</button>
+          <button class="btn small" id="reset">Restaurar</button>
+        </div>
+      </section>
+
+      <section>
+        <h3>Salvar PDF</h3>
+        <button class="btn primary block" id="saveSel">Salvar páginas selecionadas</button>
+        <button class="btn block" id="saveAll">Salvar documento editado</button>
+        <button class="btn block" id="split">Dividir: 1 PDF por página (.zip)</button>
+      </section>
+
+      <section>
+        <h3>Converter em imagem</h3>
+        <div class="row">
+          <select id="imgFormat">
+            <option value="png">PNG</option>
+            <option value="jpeg">JPG</option>
+          </select>
+          <select id="imgDpi">
+            <option value="96">96 DPI (tela)</option>
+            <option value="150" selected>150 DPI</option>
+            <option value="300">300 DPI (impressão)</option>
+          </select>
+        </div>
+        <button class="btn block" id="toImage">Converter páginas</button>
+        <button class="btn block" id="extractText">Extrair texto (.txt)</button>
+      </section>
+
+      <section>
+        <h3>Extras</h3>
+        <div class="row">
+          <select id="numPos">
+            <option value="center">Centro</option>
+            <option value="right">Direita</option>
+            <option value="left">Esquerda</option>
+          </select>
+          <button class="btn small" id="pageNumbers">Numerar páginas</button>
+        </div>
+        <div class="row">
+          <input id="wmText" type="text" placeholder="Texto da marca d'água" value="CONFIDENCIAL">
+          <button class="btn small" id="watermark">Aplicar</button>
+        </div>
+        <div class="row">
+          <select id="compressLevel">
+            <option value="0.5">Compressão alta</option>
+            <option value="0.7" selected>Compressão média</option>
+            <option value="0.85">Compressão leve</option>
+          </select>
+          <button class="btn small" id="compress">Comprimir</button>
+        </div>
+        <p class="note">Comprimir transforma as páginas em imagem (o texto deixa de ser selecionável).</p>
+      </section>
+
+      <p class="note" id="actionScope"></p>
+    </aside>
+  </div>
+
+  <div id="viewer" class="viewer" hidden>
+    <button class="viewer-close" id="viewerClose" title="Fechar (Esc)">✕</button>
+    <button class="viewer-nav prev" id="viewerPrev" title="Anterior (←)">‹</button>
+    <div class="viewer-body"><canvas id="viewerCanvas"></canvas></div>
+    <button class="viewer-nav next" id="viewerNext" title="Próxima (→)">›</button>
+    <div class="viewer-label" id="viewerLabel"></div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="lib/pdf-lib.min.js"></script>
+  <script src="lib/jszip.min.js"></script>
+  <script type="module" src="editor.js"></script>
+</body>
+</html>
