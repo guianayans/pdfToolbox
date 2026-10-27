@@ -79,7 +79,7 @@ Recebeu uma fatura de 9 páginas no e-mail e só precisa de uma? Quer o PDF em i
 
 ### 🦊 Firefox
 
-A versão para Firefox fica na pasta [`firefoxExtension/`](firefoxExtension) (Firefox 128 ou mais novo).
+A versão para Firefox fica na pasta [`firefoxExtension/`](firefoxExtension) (Firefox 140 ou mais novo).
 
 1. Abra `about:debugging#/runtime/this-firefox`.
 2. Clique em **Carregar extensão temporária…** e escolha o arquivo `firefoxExtension/manifest.json`.

@@ -19,9 +19,10 @@ m.permissions = m.permissions.filter((p) => p !== "debugger");
 m.browser_specific_settings = {
   gecko: {
     id: "pdftoolbox@guianayans",
-    strict_min_version: "128.0",
+    strict_min_version: "140.0",
     data_collection_permissions: { required: ["none"] },
   },
+  gecko_android: { strict_min_version: "142.0" },
 };
 fs.writeFileSync(process.argv[1], JSON.stringify(m, null, 2) + "\n");
 ' "$OUT/manifest.json"
