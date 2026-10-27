@@ -24,7 +24,7 @@
   "host_permissions": ["<all_urls>"],
   "commands": {
     "select-area": {
-      "suggested_key": { "default": "Alt+Shift+S" },
+      "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" },
       "description": "Selecionar uma área da página para salvar"
     }
   },
