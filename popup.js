@@ -88,5 +88,16 @@ function setupCapture(tab) {
 }
 
 $('#openLocal').onclick = () => openEditor({});
+
+// Atalho de "Selecionar área" como está registrado no navegador (Ctrl+Shift+S no Windows, ⌘⇧S no Mac,
+// ou o que o usuário tiver configurado). O Chrome no Mac já devolve "⇧⌘S"; o Firefox devolve "Command+Shift+S".
+chrome.commands.getAll().then((cmds) => {
+  const key = cmds.find((c) => c.name === 'select-area')?.shortcut;
+  if (!key) return;
+  const mac = navigator.platform.startsWith('Mac');
+  const symbols = { Command: '⌘', MacCtrl: '⌃', Ctrl: mac ? '⌘' : 'Ctrl', Shift: '⇧', Alt: '⌥' };
+  const label = mac && key.includes('+') ? key.split('+').map((k) => symbols[k] || k).join('') : key;
+  $('#selKey').textContent = ` · ${label}`;
+}, () => {});
 $('#options').onclick = () => chrome.runtime.openOptionsPage();
 init();
