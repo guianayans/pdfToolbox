@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>PDF Toolbox · Configurações</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon32.png" alt="" width="28" height="28">
+    <h1>PDF Toolbox · Configurações</h1>
+  </header>
+
+  <main>
+    <section>
+      <h2>Selecionar área</h2>
+      <p class="muted">O que fazer ao clicar em <b>Copiar</b> ou apertar <kbd id="key">⌘C</kbd> com uma área selecionada.</p>
+      <label><input type="radio" name="copyFormat" value="ask"> Perguntar sempre (PNG ou PDF)</label>
+      <label><input type="radio" name="copyFormat" value="png"> Copiar como PNG <span class="muted">— imagem na área de transferência</span></label>
+      <label><input type="radio" name="copyFormat" value="pdf"> PDF <span class="muted">— salvo em Downloads, o navegador não permite copiar PDF</span></label>
+      <p id="saved" class="saved" hidden>Salvo ✓</p>
+    </section>
+  </main>
+
+  <script src="options.js"></script>
+</body>
+</html>

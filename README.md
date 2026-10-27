@@ -48,6 +48,9 @@ Recebeu uma fatura de 9 páginas no e-mail e só precisa de uma? Quer o PDF em i
 <img src="docs/popup.png" alt="Popup com as opções de captura" width="300" align="right">
 
 - **✂️ Selecionar área**: arraste um retângulo como no **Cmd+Shift+4** do Mac e salve em **PNG, JPG, PDF** ou **copie** para a área de transferência. Atalho: **⌘ Cmd+Shift+S** (Mac) / **Ctrl+Shift+S** (Windows/Linux)
+  - Encoste o mouse na borda (ou use a rodinha) para rolar a página enquanto seleciona
+  - Ajuste depois de soltar: arraste os cantos/bordas para redimensionar ou o meio para mover
+  - **⌘C / Ctrl+C** copia a seleção. A extensão pergunta PNG ou PDF; marque **Lembrar minha escolha** para não perguntar mais (dá para mudar em ⚙️ Configurações, no rodapé do popup). PDF é salvo em Downloads, porque o navegador não permite copiar PDF
 - **📄 Página inteira em PDF**: a página toda, dividida em folhas A4
 - **🖼️ Página inteira em PNG**: uma imagem única, rolando até o fim
 - **🖥️ Área visível**: PNG do que está na tela

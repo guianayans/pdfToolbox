@@ -45,7 +45,7 @@
         padding: 2px 6px; border-radius: 4px; font-size: 11px; white-space: nowrap;
       }
       .bar {
-        position: fixed; display: flex; gap: 4px; padding: 5px; border-radius: 10px;
+        position: fixed; display: flex; flex-direction: column; gap: 6px; padding: 5px; border-radius: 10px;
         background: rgba(20, 20, 24, 0.95); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
       }
       .bar button {
@@ -55,6 +55,12 @@
       .bar button:hover { background: #e5322d; }
       .bar button.ghost { background: transparent; font-weight: 400; }
       .bar button.ghost:hover { background: rgba(255, 255, 255, 0.15); }
+      .btns { display: flex; gap: 4px; }
+      .ask { color: #fff; padding: 6px 6px 4px; display: grid; gap: 8px; }
+      .ask .row { display: flex; gap: 6px; }
+      .ask .row button { flex: 1; }
+      .ask label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+      .ask small { color: rgba(255, 255, 255, 0.6); font-size: 11px; }
       [hidden] { display: none !important; }
     </style>
     <div class="layer">
@@ -64,12 +70,24 @@
         ${['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((h) => `<div class="h" data-h="${h}"></div>`).join('')}
       </div>
       <div class="bar" hidden>
-        <button data-act="png">PNG</button>
-        <button data-act="jpg">JPG</button>
-        <button data-act="pdf">PDF</button>
-        <button data-act="copy">Copiar</button>
-        <button data-act="redo" class="ghost" title="Selecionar de novo">Refazer</button>
-        <button data-act="close" class="ghost" title="Cancelar (Esc)">✕</button>
+        <div class="btns">
+          <button data-act="png">PNG</button>
+          <button data-act="jpg">JPG</button>
+          <button data-act="pdf">PDF</button>
+          <button data-act="copy" title="Copiar (${navigator.platform.startsWith('Mac') ? '⌘C' : 'Ctrl+C'})">Copiar</button>
+          <button data-act="redo" class="ghost" title="Selecionar de novo">Refazer</button>
+          <button data-act="close" class="ghost" title="Cancelar (Esc)">✕</button>
+        </div>
+        <div class="ask" hidden>
+          <span>Copiar a seleção como:</span>
+          <div class="row">
+            <button data-copy="png" title="Copia a imagem para a área de transferência">PNG</button>
+            <button data-copy="pdf" title="O navegador não deixa copiar PDF: o arquivo vai para Downloads">PDF</button>
+          </div>
+          <label><input type="checkbox" class="remember"> Lembrar minha escolha</label>
+          <small>PDF não pode ir para a área de transferência: ele é salvo em Downloads.<br>
+          A escolha lembrada pode ser mudada nas configurações da extensão.</small>
+        </div>
       </div>
     </div>`;
   document.documentElement.append(host);
@@ -79,6 +97,13 @@
   const box = root.querySelector('.box');
   const size = root.querySelector('.size');
   const bar = root.querySelector('.bar');
+  const ask = root.querySelector('.ask');
+
+  // formato de cópia lembrado: 'ask' (perguntar), 'png' ou 'pdf'
+  let copyFormat = 'ask';
+  chrome.storage.local.get('copyFormat').then((r) => (copyFormat = r.copyFormat || 'ask'), () => {});
+  const onPrefs = (changes) => changes.copyFormat && (copyFormat = changes.copyFormat.newValue || 'ask');
+  chrome.storage.onChanged.addListener(onPrefs);
 
   // x/w em coordenadas da janela; y/h em coordenadas do documento (a seleção acompanha a rolagem)
   let drag = null; // { mode: 'new' | 'move' | alça (n, se, w…) }
@@ -96,6 +121,7 @@
     removeEventListener('mousemove', onMove, true);
     removeEventListener('mouseup', onUp, true);
     removeEventListener('scroll', onScroll, true);
+    chrome.storage.onChanged.removeListener(onPrefs);
     delete window.__pdfToolboxSelect;
   }
 
@@ -103,7 +129,13 @@
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
-      cleanup();
+      if (!ask.hidden) closeAsk();
+      else cleanup();
+    } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c') {
+      // Cmd+C / Ctrl+C copia a seleção (em vez do texto da página)
+      e.preventDefault();
+      e.stopPropagation();
+      if (cropped && !bar.hidden) copy();
     }
   }
   document.addEventListener('keydown', onKey, true);
@@ -147,6 +179,7 @@
   function reset() {
     rect = cropped = drag = null;
     box.hidden = bar.hidden = true;
+    ask.hidden = true;
     hint.hidden = false;
     hint.textContent = HINT;
     layer.classList.remove('has-box', 'done');
@@ -205,6 +238,7 @@
     }
     startScrollY = scrollY;
     hint.hidden = bar.hidden = true;
+    closeAsk();
     box.hidden = false;
     layer.classList.add('has-box');
     updateRect();
@@ -307,6 +341,10 @@
 
     layer.classList.add('done');
     bar.hidden = false;
+    placeBar();
+  }
+
+  function placeBar() {
     const barW = bar.offsetWidth;
     const barH = bar.offsetHeight;
     // abaixo da seleção; se não couber, acima; senão, dentro da parte visível dela
@@ -327,27 +365,51 @@
     setTimeout(cleanup, 1200);
   }
 
-  bar.addEventListener('click', async (e) => {
-    const act = e.target.closest('[data-act]')?.dataset.act;
-    if (!act) return;
-    if (act === 'close') return cleanup();
-    if (act === 'redo') return reset();
+  function closeAsk() {
+    if (ask.hidden) return;
+    ask.hidden = true;
+    if (!bar.hidden) placeBar();
+  }
 
-    if (act === 'copy') {
-      try {
-        const blob = await new Promise((ok) => cropped.toBlob(ok, 'image/png'));
-        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        flash('Copiado para a área de transferência ✓');
-      } catch {
-        flash('Este site não permite copiar. Use PNG para salvar.');
-      }
-      return;
+  // Copiar: pergunta PNG ou PDF, a não ser que haja uma escolha lembrada
+  function copy() {
+    if (copyFormat === 'png' || copyFormat === 'pdf') return copyAs(copyFormat);
+    ask.hidden = false;
+    root.querySelector('.remember').checked = false;
+    placeBar();
+  }
+
+  async function copyAs(format) {
+    if (format === 'pdf') return save('pdf', 'PDF salvo em Downloads ✓ (o navegador não permite copiar PDF)');
+    try {
+      // o blob vai como promessa para a escrita acontecer ainda dentro do gesto do usuário
+      const blob = new Promise((ok) => cropped.toBlob(ok, 'image/png'));
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      flash('Copiado para a área de transferência ✓');
+    } catch {
+      flash('Este site não permite copiar. Use PNG para salvar.');
     }
+  }
 
+  async function save(act, okMsg = 'Salvo ✓') {
     const dataUrl = act === 'jpg' ? cropped.toDataURL('image/jpeg', 0.92) : cropped.toDataURL('image/png');
     const res = await chrome.runtime
       .sendMessage({ type: 'save-crop', format: act, dataUrl, width: rect.w, height: rect.h, title: document.title })
       .catch((err) => ({ error: String(err.message || err) }));
-    flash(res?.error ? `Erro: ${res.error}` : 'Salvo ✓');
+    flash(res?.error ? `Erro: ${res.error}` : okMsg);
+  }
+
+  bar.addEventListener('click', (e) => {
+    const format = e.target.closest('[data-copy]')?.dataset.copy;
+    if (format) {
+      if (root.querySelector('.remember').checked) chrome.storage.local.set({ copyFormat: format });
+      return copyAs(format);
+    }
+    const act = e.target.closest('[data-act]')?.dataset.act;
+    if (!act) return;
+    if (act === 'close') return cleanup();
+    if (act === 'redo') return reset();
+    if (act === 'copy') return copy();
+    save(act);
   });
 })();

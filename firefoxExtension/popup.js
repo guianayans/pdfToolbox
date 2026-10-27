@@ -88,4 +88,5 @@ function setupCapture(tab) {
 }
 
 $('#openLocal').onclick = () => openEditor({});
+$('#options').onclick = () => chrome.runtime.openOptionsPage();
 init();
