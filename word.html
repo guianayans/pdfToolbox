@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Documento Word · PDF Toolbox</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="word.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="icons/icon32.png" alt="" width="24" height="24"> PDF Toolbox</div>
+    <div class="doc-title" id="docTitle">Documento Word</div>
+    <div class="top-actions">
+      <button class="btn" id="download" hidden>⬇ Baixar original</button>
+      <button class="btn" id="edit" disabled>🧰 Abrir nas Ferramentas</button>
+      <button class="btn primary" id="print" disabled>📄 Salvar como PDF</button>
+    </div>
+  </header>
+  <p class="hint" id="hint">Em “Salvar como PDF”, escolha <b>Salvar como PDF</b> como destino na janela de impressão. O texto continua selecionável.</p>
+  <main id="doc">
+    <div class="loading" id="loading"><div class="spinner"></div><p>Abrindo documento…</p></div>
+  </main>
+  <script src="lib/jszip.min.js"></script>
+  <script src="lib/docx-preview.min.js"></script>
+  <script type="module" src="word.js"></script>
+</body>
+</html>

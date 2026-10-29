@@ -13,8 +13,8 @@
     <div class="doc-title" id="docTitle">Nenhum documento</div>
     <div class="top-actions">
       <label class="btn secondary">
-        ➕ Adicionar PDF
-        <input type="file" id="fileInput" accept="application/pdf,.pdf" multiple hidden>
+        ➕ Adicionar PDF ou Word
+        <input type="file" id="fileInput" accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
       </label>
     </div>
   </header>
@@ -24,8 +24,8 @@
       <div id="dropzone" class="dropzone">
         <div class="drop-inner">
           <div class="big-icon">📄</div>
-          <h2>Arraste PDFs aqui</h2>
-          <p>ou use “Adicionar PDF”. Tudo é processado localmente no seu navegador.</p>
+          <h2>Arraste PDFs ou documentos Word aqui</h2>
+          <p>ou use “Adicionar PDF ou Word”. Tudo é processado localmente no seu navegador.</p>
         </div>
       </div>
       <div id="loading" class="loading" hidden>
@@ -54,6 +54,12 @@
       </section>
 
       <section>
+        <h3>Editar conteúdo</h3>
+        <button class="btn primary block" id="openEditor">✏️ Editar PDF (texto, desenho, imagem)</button>
+        <p class="note">Edite textos existentes, adicione texto, apague áreas, destaque, desenhe ou assine. As edições vão para o PDF e para o Word.</p>
+      </section>
+
+      <section>
         <h3>Organizar</h3>
         <div class="row">
           <button class="btn small" id="rotLeft" title="Girar à esquerda">↺ Girar</button>
@@ -72,6 +78,15 @@
         <button class="btn primary block" id="saveSel">Salvar páginas selecionadas</button>
         <button class="btn block" id="saveAll">Salvar documento editado</button>
         <button class="btn block" id="split">Dividir: 1 PDF por página (.zip)</button>
+      </section>
+
+      <section>
+        <h3>Converter para Word</h3>
+        <select id="wordMode" class="block">
+          <option value="layout">Manter o visual do PDF (recomendado)</option>
+          <option value="flow">Só o texto, em parágrafos (mais fácil de reescrever)</option>
+        </select>
+        <button class="btn block" id="toWord">📝 Baixar em Word (.docx)</button>
       </section>
 
       <section>
@@ -128,10 +143,49 @@
     <div class="viewer-label" id="viewerLabel"></div>
   </div>
 
+  <div id="editView" class="edit-view" hidden>
+    <div class="ed-toolbar">
+      <div class="ed-group">
+        <button data-tool="select" title="Selecionar e mover">🖱 Mover</button>
+        <button data-tool="edittext" title="Reescrever um texto do documento">✏️ Editar texto</button>
+        <button data-tool="text" title="Adicionar texto">𝐓 Texto</button>
+        <button data-tool="cover" title="Cobrir/apagar uma área">⬜ Apagar</button>
+        <button data-tool="highlight" title="Destacar">🖍 Destacar</button>
+        <button data-tool="ink" title="Desenhar ou assinar">✍️ Desenhar</button>
+        <label class="ed-file" title="Inserir imagem ou assinatura (PNG/JPG)">🖼 Imagem<input type="file" id="edImage" accept="image/png,image/jpeg" hidden></label>
+      </div>
+      <div class="ed-group">
+        <select id="edFont" title="Fonte">
+          <option value="Helvetica">Helvetica / Arial</option>
+          <option value="Times">Times</option>
+          <option value="Courier">Courier</option>
+        </select>
+        <input id="edSize" type="number" min="4" max="200" step="0.5" value="12" title="Tamanho (pt)">
+        <button id="edBold" title="Negrito"><b>B</b></button>
+        <button id="edItalic" title="Itálico"><i>I</i></button>
+        <input id="edColor" type="color" value="#000000" title="Cor">
+        <button id="edDelete" title="Excluir item (Delete)">🗑</button>
+        <button id="edUndo" title="Desfazer (Cmd/Ctrl+Z)">↶</button>
+      </div>
+      <div class="ed-group ed-nav">
+        <button id="edPrev" title="Página anterior (←)">‹</button>
+        <span id="edLabel"></span>
+        <button id="edNext" title="Próxima página (→)">›</button>
+        <button id="edClose" class="ed-done">Concluir</button>
+      </div>
+    </div>
+    <p class="ed-hint" id="edHint"></p>
+    <div class="ed-scroll" id="edScroll">
+      <div class="ed-stage" id="edStage"><div class="ed-layer" id="edLayer"></div></div>
+    </div>
+  </div>
+
   <div id="toast" class="toast" hidden></div>
 
   <script src="lib/pdf-lib.min.js"></script>
   <script src="lib/jszip.min.js"></script>
+  <script src="lib/docx-preview.min.js"></script>
+  <script src="lib/html2canvas.min.js"></script>
   <script type="module" src="editor.js"></script>
 </body>
 </html>

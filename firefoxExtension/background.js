@@ -1,4 +1,4 @@
-// Service worker: coleta PDFs detectados por aba, atualiza o badge e faz o ícone piscar.
+// Service worker: coleta PDFs e documentos Word detectados por aba, atualiza o badge e faz o ícone piscar.
 // Também captura a página (PDF/PNG/área selecionada) quando não há PDF para salvar.
 
 // no Firefox o background é uma página de eventos e o manifest já carrega a lib
@@ -95,13 +95,15 @@ function filenameFromDisposition(cd) {
 function filenameFromUrl(url) {
   try {
     const last = new URL(url).pathname.split('/').pop();
-    return decodeURIComponent(last) || 'documento.pdf';
+    return decodeURIComponent(last) || 'documento';
   } catch {
-    return 'documento.pdf';
+    return 'documento';
   }
 }
 
-// Respostas de rede com Content-Type PDF (abas, iframes, XHR, downloads).
+const WORD_TYPE = /application\/(msword|vnd\.openxmlformats-officedocument\.wordprocessingml)/i;
+
+// Respostas de rede com Content-Type PDF ou Word (abas, iframes, XHR, downloads).
 chrome.webRequest.onHeadersReceived.addListener(
   (d) => {
     if (d.tabId < 0 || d.statusCode >= 400) return;
@@ -113,10 +115,14 @@ chrome.webRequest.onHeadersReceived.addListener(
       else if (n === 'content-disposition') disposition = h.value || '';
     }
     const fname = filenameFromDisposition(disposition);
-    if (!/application\/(x-)?pdf/i.test(type) && !/\.pdf$/i.test(fname || '')) return;
+    let kind = null;
+    if (/application\/(x-)?pdf/i.test(type) || /\.pdf$/i.test(fname || '')) kind = 'pdf';
+    else if (WORD_TYPE.test(type) || /\.docx?$/i.test(fname || '')) kind = 'word';
+    if (!kind) return;
     let name = fname || filenameFromUrl(d.url);
-    if (!/\.pdf$/i.test(name)) name += '.pdf';
-    addItems(d.tabId, [{ url: d.url, name, source: 'rede', frameId: d.frameId }]);
+    if (kind === 'pdf' && !/\.pdf$/i.test(name)) name += '.pdf';
+    if (kind === 'word' && !/\.docx?$/i.test(name)) name += /msword/i.test(type) ? '.doc' : '.docx';
+    addItems(d.tabId, [{ url: d.url, name, source: 'rede', frameId: d.frameId, kind }]);
   },
   { urls: ['<all_urls>'] },
   ['responseHeaders']

@@ -83,6 +83,9 @@ button.primary { background: var(--accent); color: #fff; font-weight: 600; }
 button.primary:hover { background: var(--accent-dark); }
 button.icon { background: var(--surface); color: var(--text); padding: 6px 8px; }
 button.icon:hover { background: var(--border); }
+button.convert { font-size: 11px; font-weight: 700; color: var(--accent); min-width: 30px; }
+button.convert.word { color: #2b579a; }
+.file-icon.word { background: #2b579a; }
 button.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 button.secondary:hover { background: var(--border); }
 button.link { background: none; color: var(--muted); }

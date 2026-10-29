@@ -1,0 +1,45 @@
+[hidden] { display: none !important; }
+:root {
+  --accent: #e5322d;
+  --accent-dark: #c4231f;
+  --bg: #e9e9ee;
+  --panel: #ffffff;
+  --text: #1f1f24;
+  --muted: #6b6b76;
+  --border: #e2e2e8;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #141418; --panel: #1c1c21; --text: #ececf1; --muted: #9a9aa6; --border: #33333b; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+.topbar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; }
+.doc-title { flex: 1; min-width: 120px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { font: inherit; font-size: 13px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: var(--accent-dark); }
+.hint { margin: 10px 20px 0; color: var(--muted); font-size: 12px; text-align: center; }
+main { padding: 16px; overflow-x: auto; }
+.loading { display: grid; place-items: center; padding: 80px 0; color: var(--muted); }
+.spinner { width: 34px; height: 34px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.error { max-width: 520px; margin: 60px auto; padding: 16px 20px; border-radius: 10px; background: var(--panel); border: 1px solid var(--accent); }
+main .docx-wrapper { background: transparent; padding: 0; }
+main .docx-wrapper > section.docx { margin: 0 auto 20px; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15); }
+
+@media print {
+  @page { margin: 0; }
+  body { background: #fff; }
+  .topbar, .hint { display: none !important; }
+  main { padding: 0; overflow: visible; }
+  main .docx-wrapper > section.docx { margin: 0; box-shadow: none; break-after: page; }
+  main .docx-wrapper > section.docx:last-child { break-after: auto; }
+}

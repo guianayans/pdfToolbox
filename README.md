@@ -24,23 +24,28 @@ Recebeu uma fatura de 9 páginas no e-mail e só precisa de uma? Quer o PDF em i
 
 ## ✨ Funcionalidades
 
-### 🔎 Detecção automática de PDFs
+### 🔎 Detecção automática de PDFs e documentos Word
 - **Anexos do Gmail**, incluindo os abertos no visualizador
-- **Links** para arquivos `.pdf`
+- **Links** para arquivos `.pdf`, `.docx` e `.doc`
 - **PDFs embutidos** em `<embed>`, `<object>` e `<iframe>`
-- **Respostas de rede** com `Content-Type: application/pdf` (downloads, visualizadores, XHR)
-- O ícone **pisca** e mostra quantos PDFs foram encontrados na aba
+- **Respostas de rede** com `Content-Type` de PDF ou Word (downloads, visualizadores, XHR)
+- O ícone **pisca** e mostra quantos arquivos foram encontrados na aba
+- No popup, cada PDF tem **⬇ baixar**, **W baixar em Word** e **Ferramentas**; cada Word tem **⬇ baixar**, **PDF** (ver e salvar como PDF) e **Ferramentas**
 
 ### 🛠️ Editor de PDF
 | Categoria | O que faz |
 |---|---|
+| **Editar conteúdo** | **Editar texto existente** (mantém fonte, tamanho e cor) · adicionar texto · apagar áreas · destacar · desenhar/assinar · inserir imagem. As edições vão para o PDF, as imagens e o Word |
 | **Seleção** | Clique, Shift+clique para intervalo, ou digite `1-3, 5, 8` |
 | **Organizar** | Reordenar arrastando, girar, excluir, inverter ordem, desfazer (Ctrl/Cmd+Z), restaurar |
 | **Salvar** | Só as páginas selecionadas · documento editado · dividir em 1 PDF por página (.zip) |
 | **Juntar** | Adicione outros PDFs pelo botão ou arrastando arquivos para a janela |
-| **Converter** | Páginas em **PNG** ou **JPG** (96, 150 ou 300 DPI) · extrair texto (.txt) |
+| **Converter** | **PDF → Word (.docx)** · páginas em **PNG** ou **JPG** (96, 150 ou 300 DPI) · extrair texto (.txt) |
+| **Word** | Abra `.docx` no editor (vira PDF) ou no visualizador, que salva um **PDF com texto selecionável** |
 | **Extras** | Numerar páginas · marca d'água · comprimir |
 | **Visualizar** | Duplo clique amplia a página; navegue com ← → |
+
+> **PDF → Word** tem dois modos: **manter o visual** (cada linha de texto fica editável na mesma posição, com fonte, tamanho, negrito e cor; fundos, tabelas e logotipos vão como imagem atrás do texto) e **só o texto** (parágrafos normais, mais fácil de reescrever).
 
 > PDFs **protegidos** (comuns em faturas bancárias) são descriptografados automaticamente antes da edição. Se pedirem senha para abrir, o editor pergunta.
 
@@ -157,6 +162,10 @@ Sem seleção, as ações de converter, dividir, extrair texto e extras valem pa
 | `capture.js` | Overlay de seleção de área (Shadow DOM, sem interferir no site) |
 | `popup.*` | Lista de PDFs e opções de captura |
 | `editor.*` | Editor: miniaturas, organização e exportações |
+| `annotate.js` | Editor de conteúdo (texto, apagar, destacar, desenho, imagem) e aplicação das edições |
+| `pdf2docx.js` | Conversão PDF → Word, gerando o .docx no navegador |
+| `docx2pdf.js` | Leitura de Word (.docx) e conversão em PDF |
+| `word.*` | Visualizador de Word com "Salvar como PDF" |
 | `lib/` | Bibliotecas de terceiros, empacotadas localmente (o MV3 proíbe código remoto) |
 
 ## ⚠️ Limitações conhecidas
@@ -165,12 +174,14 @@ Sem seleção, as ações de converter, dividir, extrair texto e extras valem pa
 - **Firefox:** não tem a API `debugger`, então funciona como no Comet: "página inteira" é feita por rolagem e o PDF sai como imagem. Se o atalho `Cmd+Shift+S` conflitar com o de captura de tela do Firefox, troque em `about:addons` → ⚙️ → **Gerenciar atalhos de extensões**.
 - **Sites que rolam por dentro de um painel** (o Gmail é um exemplo): "página inteira" captura só a parte visível. Use a seleção de área.
 - **Comprimir** transforma as páginas em imagem.
+- **PDF → Word** reproduz o visual com quadros de texto posicionados: fica fiel no **Microsoft Word**; Google Docs e Pages ignoram parte do posicionamento (use o modo "só o texto" nesses casos). PDFs escaneados viram imagem no Word (não há OCR).
+- **Word → PDF no editor** desenha as páginas como imagem (o texto não pode ser editado com "Editar texto"). Para PDF com texto, use **Salvar como PDF** no visualizador. Arquivos `.doc` antigos precisam ser salvos como `.docx` antes.
+- **Editar texto** troca a linha inteira por uma fonte padrão do PDF (Helvetica, Times ou Courier) parecida com a original.
 - Páginas internas do navegador (`chrome://`, `comet://`, loja de extensões) não podem ser capturadas.
 - Não crie arquivos ou pastas começando com `_` na pasta da extensão: o Chrome recusa carregá-la.
 
 ## 🗺️ Ideias para o futuro
 
-- [ ] Assinar e escrever/anotar no PDF
 - [ ] Imagens → PDF (JPG/PNG para PDF)
 - [ ] OCR para PDFs escaneados
 - [ ] Botão flutuante direto no visualizador do Gmail
@@ -184,7 +195,9 @@ Bibliotecas incluídas em `lib/`, com suas respectivas licenças:
 |---|---|---|
 | [pdf.js](https://github.com/mozilla/pdf.js) 4.10.38 (Mozilla) | Renderizar páginas, miniaturas, extrair texto | Apache-2.0 |
 | [@cantoo/pdf-lib](https://github.com/cantoo-scribe/pdf-lib) 2.11.1 | Montar PDFs, com suporte a PDFs criptografados (fork do [pdf-lib](https://github.com/Hopding/pdf-lib)) | MIT |
-| [JSZip](https://github.com/Stuk/jszip) 3.10.1 | Gerar arquivos .zip | MIT / GPLv3 (usado sob MIT) |
+| [JSZip](https://github.com/Stuk/jszip) 3.10.1 | Gerar arquivos .zip e .docx | MIT / GPLv3 (usado sob MIT) |
+| [docx-preview](https://github.com/VolodymyrBaydalka/docxjs) 0.3.7 | Exibir documentos Word | Apache-2.0 |
+| [html2canvas](https://github.com/niklasvh/html2canvas) 1.4.1 | Desenhar as páginas do Word para gerar o PDF | MIT |
 
 ## 📄 Licença
 

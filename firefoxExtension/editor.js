@@ -1,4 +1,8 @@
 import * as pdfjsLib from './lib/pdf.min.mjs';
+import { pdfToDocx } from './pdf2docx.js';
+import { fetchFromPage } from './fetch-file.js';
+import { docxToPdf, isZip, isLegacyDoc } from './docx2pdf.js';
+import { hasEdits, applyEdits, wordExtras, initAnnotator, openAnnotator } from './annotate.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = './lib/pdf.worker.min.mjs';
 const { PDFDocument, StandardFonts, rgb, degrees } = window.PDFLib;
@@ -23,7 +27,8 @@ function pushHistory() {
 }
 const selected = () => pages.filter((p) => p.selected);
 const targets = () => (selected().length ? selected() : pages);
-const baseName = () => docName.replace(/\.pdf$/i, '');
+const baseName = () => docName.replace(/\.(pdf|docx?)$/i, '');
+const isWordName = (name) => /\.docx?$/i.test(name);
 
 // ---------- Utilidades ----------
 let toastTimer;
@@ -75,36 +80,7 @@ function isPdf(buf) {
   return head.includes('%PDF');
 }
 
-function base64ToBuffer(b64) {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out.buffer;
-}
-
 // ---------- Carregamento ----------
-async function fetchFromPage(url, tabId, frameId) {
-  // 1) a extensão tenta direto (tem permissão de host e envia cookies)
-  try {
-    const r = await fetch(url, { credentials: 'include' });
-    if (r.ok) {
-      const buf = await r.arrayBuffer();
-      if (isPdf(buf)) return buf;
-    }
-  } catch {
-    // segue para o fallback
-  }
-  // 2) pede para o content script buscar no contexto da página (blob:, sessões restritas)
-  if (tabId != null) {
-    const res = await chrome.tabs.sendMessage(tabId, { type: 'fetch-pdf', url }, { frameId }).catch(() => null);
-    if (res?.data) {
-      const buf = base64ToBuffer(res.data);
-      if (isPdf(buf)) return buf;
-    }
-  }
-  throw new Error('não foi possível obter o PDF da página. Baixe o arquivo e arraste-o para cá.');
-}
-
 async function addSource(buffer, name) {
   const bytes = new Uint8Array(buffer);
   const task = pdfjsLib.getDocument({ data: bytes.slice(), isEvalSupported: false });
@@ -138,12 +114,24 @@ async function addSource(buffer, name) {
   render();
 }
 
+// Documento Word: vira PDF (páginas como imagem) para usar as ferramentas.
+async function addWord(buffer, name) {
+  if (isLegacyDoc(buffer)) throw new Error(`“${name}” está no formato .doc antigo. Abra no Word e salve como .docx.`);
+  const pdf = await docxToPdf(buffer, {
+    onProgress: (i, n) => ($('#loadingText').textContent = `Convertendo Word em PDF… página ${i + 1} de ${n}`),
+  });
+  await addSource(pdf.buffer, name.replace(/\.docx?$/i, '.pdf'));
+}
+
 async function addFiles(files) {
-  const pdfs = [...files].filter((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
-  if (!pdfs.length) return toast('Selecione arquivos PDF.', true);
-  await run('Carregando PDF…', async () => {
-    for (const f of pdfs) await addSource(await f.arrayBuffer(), f.name);
-    if (sources.length > 1) toast(`${pdfs.length} arquivo(s) adicionado(s) ao final.`);
+  const ok = [...files].filter((f) => f.type === 'application/pdf' || /\.(pdf|docx?)$/i.test(f.name));
+  if (!ok.length) return toast('Selecione arquivos PDF ou Word (.docx).', true);
+  await run('Carregando…', async () => {
+    for (const f of ok) {
+      if (isWordName(f.name)) await addWord(await f.arrayBuffer(), f.name);
+      else await addSource(await f.arrayBuffer(), f.name);
+    }
+    if (sources.length > 1) toast(`${ok.length} arquivo(s) adicionado(s) ao final.`);
   });
 }
 
@@ -233,6 +221,7 @@ function render() {
     card.innerHTML = `
       <div class="check">✓</div>
       <div class="card-actions">
+        <button data-act="edit" title="Editar conteúdo">✏️</button>
         <button data-act="view" title="Ampliar">🔍</button>
         <button data-act="rot" title="Girar">↻</button>
         <button data-act="del" title="Excluir">🗑</button>
@@ -240,6 +229,7 @@ function render() {
       <div class="thumb"></div>
       <div class="card-label"><b>${i + 1}</b><span></span></div>`;
     if (sources.length > 1) card.querySelector('.card-label span').textContent = `${sources[p.src].name.slice(0, 18)} · p.${p.index + 1}`;
+    if (hasEdits(p)) card.insertAdjacentHTML('beforeend', '<span class="edited-badge">editada</span>');
     const thumb = card.querySelector('.thumb');
     thumb.dataset.key = thumbKey(p);
     if (thumbCache.has(thumb.dataset.key)) thumb.append(thumbImg(thumb.dataset.key));
@@ -282,6 +272,7 @@ $('#grid').addEventListener('click', (e) => {
   const p = pages.find((x) => x.id === Number(card.dataset.id));
   const act = e.target.closest('[data-act]')?.dataset.act;
   if (act === 'view') return openViewer(pages.indexOf(p));
+  if (act === 'edit') return openAnnotator(pages, pages.indexOf(p));
   if (act === 'rot') {
     pushHistory();
     p.rot = (p.rot + 90) % 360;
@@ -438,7 +429,7 @@ $('#reset').addEventListener('click', () => {
 });
 
 // ---------- Geração de PDF ----------
-async function buildPdf(list) {
+async function buildPdf(list, { skipText = false } = {}) {
   const out = await PDFDocument.create();
   // copia todas as páginas de cada origem de uma vez (evita duplicar fontes/recursos)
   const copied = new Map();
@@ -451,18 +442,24 @@ async function buildPdf(list) {
   for (const p of list) {
     if (sources[p.src].rasterOnly) {
       // fallback para PDFs que não puderam ser descriptografados: página vira imagem 200 DPI
-      const { width, height } = await pageSize(p);
-      const canvas = await renderPage(p, 200 / 72);
+      const base = { ...p, rot: 0 };
+      const { width, height } = await pageSize(base);
+      const canvas = await renderPage(base, 200 / 72);
       const jpg = await out.embedJpg(await (await canvasToBlob(canvas, 'image/jpeg', 0.92)).arrayBuffer());
       canvas.width = canvas.height = 0;
-      out.addPage([width, height]).drawImage(jpg, { x: 0, y: 0, width, height });
+      const page = out.addPage([width, height]);
+      page.drawImage(jpg, { x: 0, y: 0, width, height });
+      await applyEdits(out, page, p, visualFrame(page), { skipText });
+      page.setRotation(degrees(p.rot));
       continue;
     }
     const n = cursor.get(p.src) || 0;
     cursor.set(p.src, n + 1);
     const page = copied.get(p.src)[n];
-    page.setRotation(degrees((page.getRotation().angle + p.rot + 360) % 360));
     out.addPage(page);
+    // edições ficam na orientação original da página; o giro do usuário vem depois
+    await applyEdits(out, page, p, visualFrame(page), { skipText });
+    page.setRotation(degrees((page.getRotation().angle + p.rot + 360) % 360));
   }
   return out;
 }
@@ -504,6 +501,32 @@ $('#split').addEventListener('click', () =>
 // ---------- Imagens e texto ----------
 const canvasToBlob = (canvas, type, quality) => new Promise((ok) => canvas.toBlob(ok, type, quality));
 
+// Para exportar como imagem/Word: se houver edições, renderiza a partir do PDF já editado.
+async function exportRenderer(list, opts) {
+  if (!list.some(hasEdits) && !opts?.skipText) {
+    return { render: (i, scale) => renderPage(list[i], scale), size: (i) => pageSize(list[i]), doc: null };
+  }
+  const bytes = await saveDoc(await buildPdf(list, opts));
+  const doc = await pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise;
+  const render = async (i, scale) => {
+    const page = await doc.getPage(i + 1);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    return canvas;
+  };
+  const size = async (i) => {
+    const vp = (await doc.getPage(i + 1)).getViewport({ scale: 1 });
+    return { width: vp.width, height: vp.height };
+  };
+  return { render, size, doc };
+}
+
 $('#toImage').addEventListener('click', () =>
   run('Convertendo…', async () => {
     const fmt = $('#imgFormat').value;
@@ -511,10 +534,11 @@ $('#toImage').addEventListener('click', () =>
     const ext = fmt === 'jpeg' ? 'jpg' : 'png';
     const list = targets();
     const files = [];
-    for (const p of list) {
+    const r = await exportRenderer(list);
+    for (const [i, p] of list.entries()) {
       const n = pages.indexOf(p) + 1;
       $('#loadingText').textContent = `Convertendo página ${n}…`;
-      const canvas = await renderPage(p, scale);
+      const canvas = await r.render(i, scale);
       files.push({ name: `${baseName()}-pagina-${String(n).padStart(3, '0')}.${ext}`, blob: await canvasToBlob(canvas, `image/${fmt}`, 0.92) });
       canvas.width = canvas.height = 0;
     }
@@ -543,6 +567,40 @@ $('#extractText').addEventListener('click', () =>
     download(new Blob([txt], { type: 'text/plain;charset=utf-8' }), `${baseName()}.txt`);
   })
 );
+
+// ---------- Word ----------
+async function convertToWord(list, mode) {
+  $('#loadingText').textContent = 'Preparando conversão…';
+  // sem edições: lê as páginas originais (funciona até em PDF protegido); com edições, monta o PDF
+  // editado (o texto adicionado no editor fica de fora e entra como texto do Word, não no fundo)
+  const edited = list.some(hasEdits) ? (await exportRenderer(list, { skipText: true })).doc : null;
+  const getPage = async (i) => {
+    if (edited) {
+      const page = await edited.getPage(i + 1);
+      return { page, rotation: page.rotate };
+    }
+    const p = list[i];
+    const page = await sources[p.src].doc.getPage(p.index + 1);
+    return { page, rotation: (page.rotate + p.rot) % 360 };
+  };
+  const extras = [];
+  for (const [i, p] of list.entries()) {
+    const { page, rotation } = await getPage(i);
+    const vp = page.getViewport({ scale: 1, rotation });
+    extras.push(wordExtras(p, p.rot, vp.width, vp.height));
+  }
+  const { blob, hasText } = await pdfToDocx(getPage, list.length, {
+    mode,
+    extras,
+    onProgress: (i, n) => ($('#loadingText').textContent = `Convertendo para Word… página ${i + 1} de ${n}`),
+  });
+  edited?.destroy();
+  const sel = list.length === pages.length ? '' : `-${list.length}-paginas`;
+  download(blob, `${baseName()}${sel}.docx`);
+  toast(hasText ? `Word gerado (${formatSize(blob.size)}).` : 'Word gerado, mas o PDF não tem texto (parece escaneado): as páginas foram como imagem.', !hasText);
+}
+
+$('#toWord').addEventListener('click', () => run('Convertendo para Word…', () => convertToWord(targets(), $('#wordMode').value)));
 
 // ---------- Extras ----------
 // Converte coordenadas "visuais" (como a página aparece, já girada) para o espaço da página.
@@ -618,10 +676,11 @@ $('#compress').addEventListener('click', () =>
     const scale = quality >= 0.85 ? 2 : quality >= 0.7 ? 1.5 : 1.1;
     const list = targets();
     const out = await PDFDocument.create();
-    for (const p of list) {
+    const r = await exportRenderer(list);
+    for (const [i, p] of list.entries()) {
       $('#loadingText').textContent = `Comprimindo página ${pages.indexOf(p) + 1}…`;
-      const { width, height } = await pageSize(p);
-      const canvas = await renderPage(p, scale);
+      const { width, height } = await r.size(i);
+      const canvas = await r.render(i, scale);
       const jpg = await out.embedJpg(await (await canvasToBlob(canvas, 'image/jpeg', quality)).arrayBuffer());
       canvas.width = canvas.height = 0;
       out.addPage([width, height]).drawImage(jpg, { x: 0, y: 0, width, height });
@@ -632,6 +691,18 @@ $('#compress').addEventListener('click', () =>
     toast(original ? `Comprimido: ${formatSize(original)} → ${formatSize(bytes.length)}` : `PDF comprimido (${formatSize(bytes.length)}).`);
   })
 );
+
+// ---------- Editor de conteúdo ----------
+initAnnotator({
+  pageSize,
+  renderPage,
+  sourcePage: (p) => sources[p.src].doc.getPage(p.index + 1),
+  onChange: () => render(),
+});
+$('#openEditor').addEventListener('click', () => {
+  const first = selected()[0];
+  openAnnotator(pages, first ? pages.indexOf(first) : 0);
+});
 
 // ---------- Visualizador ----------
 let viewIndex = 0;
@@ -667,7 +738,7 @@ $('#viewerNext').addEventListener('click', () => step(1));
 $('#viewer').addEventListener('click', (e) => e.target.id === 'viewer' && closeViewer());
 
 document.addEventListener('keydown', (e) => {
-  if (e.target.matches('input, select, textarea')) return;
+  if (e.target.matches('input, select, textarea') || e.target.isContentEditable || !$('#editView').hidden) return;
   const viewing = !$('#viewer').hidden;
   if (viewing) {
     if (e.key === 'Escape') closeViewer();
@@ -695,9 +766,18 @@ document.addEventListener('keydown', (e) => {
 const params = new URLSearchParams(location.search);
 updateUi();
 if (params.get('url')) {
-  run('Baixando PDF da página…', async () => {
-    const buf = await fetchFromPage(params.get('url'), Number(params.get('tab')), Number(params.get('frame') || 0));
-    $('#loadingText').textContent = 'Lendo PDF…';
-    await addSource(buf, params.get('name') || 'documento.pdf');
+  const word = params.get('kind') === 'word';
+  const name = params.get('name') || (word ? 'documento.docx' : 'documento.pdf');
+  run(word ? 'Baixando documento Word…' : 'Baixando PDF da página…', async () => {
+    const buf = await fetchFromPage(params.get('url'), Number(params.get('tab')), Number(params.get('frame') || 0), word ? (b) => isZip(b) || isLegacyDoc(b) : isPdf);
+    if (word) {
+      await addWord(buf, name);
+      docName = name;
+    } else {
+      $('#loadingText').textContent = 'Lendo PDF…';
+      await addSource(buf, name);
+    }
+    // "Baixar em Word" no popup: converte assim que abrir
+    if (params.get('action') === 'word') await convertToWord(pages, 'layout');
   });
 }

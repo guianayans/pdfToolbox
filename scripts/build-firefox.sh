@@ -9,6 +9,7 @@ OUT=firefoxExtension
 rm -rf "$OUT"
 mkdir -p "$OUT"
 cp -R background.js capture.js content.js editor.css editor.html editor.js \
+  annotate.js docx2pdf.js fetch-file.js pdf2docx.js word.css word.html word.js \
   options.css options.html options.js popup.css popup.html popup.js icons lib LICENSE "$OUT/"
 
 node -e '

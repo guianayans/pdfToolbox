@@ -275,3 +275,104 @@ body.dragging main { outline: 3px dashed var(--accent); outline-offset: -10px; }
   .layout { flex-direction: column; }
   .tools { width: auto; border-left: 0; border-top: 1px solid var(--border); max-height: 45vh; }
 }
+
+select.block { width: 100%; margin-bottom: 6px; }
+.card .edited-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 30px;
+  background: #1a73e8;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 6px;
+  pointer-events: none;
+}
+
+/* ---------- Editor visual ---------- */
+.edit-view {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.ed-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+.ed-group { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.ed-nav { margin-left: auto; }
+.ed-toolbar button, .ed-file {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ed-toolbar button:hover:not(:disabled), .ed-file:hover { border-color: var(--muted); }
+.ed-toolbar button:disabled { opacity: 0.4; cursor: not-allowed; }
+.ed-toolbar button.active, .ed-toolbar button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.ed-toolbar .ed-done { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.ed-toolbar input[type=number] { width: 62px; padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); font: inherit; }
+.ed-toolbar input[type=color] { width: 34px; height: 30px; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); cursor: pointer; }
+#edLabel { color: var(--muted); font-size: 13px; padding: 0 6px; min-width: 120px; text-align: center; }
+.ed-hint { margin: 0; padding: 6px 16px; font-size: 12px; color: var(--muted); }
+.ed-scroll { flex: 1; overflow: auto; padding: 8px 24px 40px; }
+.ed-stage {
+  position: relative;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: var(--shadow);
+  user-select: none;
+}
+.ed-stage canvas { display: block; }
+.ed-layer { position: absolute; inset: 0; overflow: hidden; }
+.ed-stage[data-tool=text] .ed-layer { cursor: text; }
+.ed-stage[data-tool=cover] .ed-layer,
+.ed-stage[data-tool=highlight] .ed-layer,
+.ed-stage[data-tool=ink] .ed-layer { cursor: crosshair; }
+.ed-item { position: absolute; }
+.ed-stage:not([data-tool=select]) .ed-item { pointer-events: none; }
+.ed-stage[data-tool=select] .ed-item { cursor: move; }
+.ed-item.selected { outline: 2px dashed #1a73e8; outline-offset: 2px; }
+.ed-text { white-space: pre; min-width: 4px; padding: 0; margin: 0; }
+.ed-text.editing { outline: 2px solid #1a73e8; outline-offset: 2px; cursor: text; user-select: text; pointer-events: auto !important; }
+.ed-cover-under { position: absolute; pointer-events: none; }
+.ed-rect.highlight { opacity: 0.38; mix-blend-mode: multiply; }
+.ed-image img { width: 100%; height: 100%; display: block; }
+.ed-ink { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ed-ink polyline { fill: none; stroke-linecap: round; stroke-linejoin: round; pointer-events: stroke; }
+.ed-stage[data-tool=select] .ed-ink polyline { cursor: move; }
+.ed-handle {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  background: #1a73e8;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  cursor: nwse-resize;
+  display: none;
+}
+.ed-item.selected .ed-handle { display: block; }
+.ed-line {
+  position: absolute;
+  border: 1px dashed rgba(26, 115, 232, 0.55);
+  background: rgba(26, 115, 232, 0.06);
+  cursor: text;
+  border-radius: 2px;
+}
+.ed-line:hover { background: rgba(26, 115, 232, 0.18); border-style: solid; }

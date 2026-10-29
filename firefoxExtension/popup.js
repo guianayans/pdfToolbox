@@ -1,10 +1,11 @@
 const $ = (s) => document.querySelector(s);
 
-function openEditor(params) {
+function openPage(page, params) {
   const qs = new URLSearchParams(params).toString();
-  chrome.tabs.create({ url: chrome.runtime.getURL(`editor.html${qs ? `?${qs}` : ''}`) });
+  chrome.tabs.create({ url: chrome.runtime.getURL(`${page}${qs ? `?${qs}` : ''}`) });
   window.close();
 }
+const openEditor = (params) => openPage('editor.html', params);
 
 function host(url) {
   if (url.startsWith('blob:')) return 'arquivo gerado pela página';
@@ -29,22 +30,29 @@ async function init() {
   const list = $('#list');
   list.replaceChildren();
   for (const item of items) {
+    const word = item.kind === 'word';
     const li = document.createElement('li');
+    // PDF: baixar, baixar em Word, ferramentas · Word: baixar, ver/salvar como PDF, ferramentas
     li.innerHTML = `
-      <div class="file-icon">PDF</div>
+      <div class="file-icon${word ? ' word' : ''}">${word ? 'DOC' : 'PDF'}</div>
       <div class="info">
         <div class="name"></div>
         <div class="meta"></div>
       </div>
       <div class="actions">
         <button class="icon" data-act="download" title="Baixar original">⬇</button>
-        <button class="primary" data-act="edit" title="Abrir ferramentas">Ferramentas</button>
+        ${word
+          ? '<button class="icon convert" data-act="convert" title="Ver e salvar como PDF">PDF</button>'
+          : '<button class="icon convert word" data-act="convert" title="Baixar em Word (.docx)">W</button>'}
+        <button class="primary" data-act="edit" title="Editar, converter e mais">Ferramentas</button>
       </div>`;
     li.querySelector('.name').textContent = item.name;
     li.querySelector('.name').title = item.name;
     li.querySelector('.meta').textContent = `${item.source} · ${host(item.url)}`;
-    li.querySelector('[data-act=edit]').onclick = () =>
-      openEditor({ url: item.url, name: item.name, tab: tab.id, frame: item.frameId ?? 0 });
+    const params = { url: item.url, name: item.name, tab: tab.id, frame: item.frameId ?? 0 };
+    li.querySelector('[data-act=edit]').onclick = () => openEditor(word ? { ...params, kind: 'word' } : params);
+    li.querySelector('[data-act=convert]').onclick = () =>
+      word ? openPage('word.html', params) : openEditor({ ...params, action: 'word' });
     li.querySelector('[data-act=download]').onclick = () =>
       chrome.downloads.download({ url: item.url, filename: item.name.replace(/[\\/:*?"<>|]/g, '_') });
     list.append(li);
