@@ -345,6 +345,8 @@ select.block { width: 100%; margin-bottom: 6px; }
 .ed-stage[data-tool=ink] .ed-layer { cursor: crosshair; }
 .ed-item { position: absolute; }
 .ed-stage:not([data-tool=select]) .ed-item { pointer-events: none; }
+.ed-stage[data-tool=edittext] .ed-text { pointer-events: auto; cursor: text; }
+.ed-stage[data-tool=edittext] .ed-text:not(.editing):hover { outline: 1px dashed rgba(26, 115, 232, 0.7); outline-offset: 2px; }
 .ed-stage[data-tool=select] .ed-item { cursor: move; }
 .ed-item.selected { outline: 2px dashed #1a73e8; outline-offset: 2px; }
 .ed-text { white-space: pre; min-width: 4px; padding: 0; margin: 0; }

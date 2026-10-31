@@ -29,6 +29,7 @@ Recebeu uma fatura de 9 páginas no e-mail e só precisa de uma? Quer o PDF em i
 - **Links** para arquivos `.pdf`, `.docx` e `.doc`
 - **PDFs embutidos** em `<embed>`, `<object>` e `<iframe>`
 - **Respostas de rede** com `Content-Type` de PDF ou Word (downloads, visualizadores, XHR)
+- **Arquivos gerados na própria página** (`blob:`), como os documentos abertos ou baixados no **WhatsApp Web**
 - O ícone **pisca** e mostra quantos arquivos foram encontrados na aba
 - No popup, cada PDF tem **⬇ baixar**, **W baixar em Word** e **Ferramentas**; cada Word tem **⬇ baixar**, **PDF** (ver e salvar como PDF) e **Ferramentas**
 
@@ -159,6 +160,7 @@ Sem seleção, as ações de converter, dividir, extrair texto e extras valem pa
 | `manifest.json` | Configuração da extensão (Manifest V3) |
 | `background.js` | Detecção via rede, estado por aba, ícone piscando, capturas de página |
 | `content.js` | Varre o DOM atrás de PDFs (Gmail, links, embeds) e baixa no contexto da página quando preciso |
+| `page-hook.js` | Roda no contexto da página e registra PDFs/Word criados como `blob:` ou recebidos por `postMessage` (visualizador do WhatsApp Web), guardando uma cópia |
 | `capture.js` | Overlay de seleção de área (Shadow DOM, sem interferir no site) |
 | `popup.*` | Lista de PDFs e opções de captura |
 | `editor.*` | Editor: miniaturas, organização e exportações |
@@ -172,10 +174,12 @@ Sem seleção, as ações de converter, dividir, extrair texto e extras valem pa
 
 - **Comet:** o navegador bloqueia a API `debugger` para extensões. Por isso, "página inteira" é feita rolando e capturando a página em partes, e o **PDF sai como imagem** (texto não selecionável). Para PDF com texto, use `Cmd+P → Salvar como PDF`. No Chrome, o PDF é gerado com o motor nativo e mantém o texto.
 - **Firefox:** não tem a API `debugger`, então funciona como no Comet: "página inteira" é feita por rolagem e o PDF sai como imagem. Se o atalho `Cmd+Shift+S` conflitar com o de captura de tela do Firefox, troque em `about:addons` → ⚙️ → **Gerenciar atalhos de extensões**.
-- **Sites que rolam por dentro de um painel** (o Gmail é um exemplo): "página inteira" captura só a parte visível. Use a seleção de área.
+- **Sites que rolam por dentro de um painel** (o Gmail é um exemplo): "página inteira" rola e captura o painel principal (o maior que rola), como imagem. Menus laterais fora dele ficam de fora.
+- **Conteúdo carregado sob demanda** (listas infinitas, dados que chegam ao rolar): a captura espera as imagens visíveis carregarem (até 2 s por tela), mas conteúdo que demora mais pode não aparecer.
 - **Comprimir** transforma as páginas em imagem.
 - **PDF → Word** reproduz o visual com quadros de texto posicionados: fica fiel no **Microsoft Word**; Google Docs e Pages ignoram parte do posicionamento (use o modo "só o texto" nesses casos). PDFs escaneados viram imagem no Word (não há OCR).
 - **Word → PDF no editor** desenha as páginas como imagem (o texto não pode ser editado com "Editar texto"). Para PDF com texto, use **Salvar como PDF** no visualizador. Arquivos `.doc` antigos precisam ser salvos como `.docx` antes.
+- **Apagar** e **Editar texto** cobrem o conteúdo antigo, que continua dentro do PDF (escondido, mas ainda pode ser copiado ou extraído). Para remover de vez um dado sensível, use **Comprimir** depois de editar: as páginas viram imagem e o texto escondido some.
 - **Editar texto** troca a linha inteira por uma fonte padrão do PDF (Helvetica, Times ou Courier) parecida com a original.
 - Páginas internas do navegador (`chrome://`, `comet://`, loja de extensões) não podem ser capturadas.
 - Não crie arquivos ou pastas começando com `_` na pasta da extensão: o Chrome recusa carregá-la.

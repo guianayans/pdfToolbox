@@ -29,7 +29,18 @@ function addItems(tabId, items) {
     const current = await getItems(tabId);
     const known = new Set(current.map((i) => i.url));
     const fresh = items.filter((i) => i.url && !known.has(i.url) && known.add(i.url));
-    if (!fresh.length) return;
+    // arquivo em blob: detectado antes de o nome ser conhecido: atualiza o nome
+    let renamed = false;
+    for (const c of current) {
+      const i = c.rename && items.find((n) => n.url === c.url && !n.rename);
+      if (!i) continue;
+      Object.assign(c, { name: i.name, rename: false });
+      renamed = true;
+    }
+    if (!fresh.length) {
+      if (renamed) await chrome.storage.session.set({ [key(tabId)]: current });
+      return;
+    }
     const all = current.concat(fresh.map((i) => ({ ...i, ts: Date.now() }))).slice(-MAX_ITEMS);
     await chrome.storage.session.set({ [key(tabId)]: all });
     await updateBadge(tabId, all.length);
@@ -218,52 +229,148 @@ async function inTab(tabId, func, args = []) {
   return res?.result;
 }
 
-// Página inteira sem a API debugger (bloqueada em alguns navegadores, como o Comet):
-// rola a janela, captura cada tela e junta tudo num único canvas.
+// ---- funções executadas dentro da página (serializadas pelo executeScript) ----
+
+// Acha o que rola: a janela ou, em apps como o Gmail, o painel que rola por dentro.
+// Marca o painel com data-pdf-toolbox-scroller e diz se ele existe.
+function findScroller() {
+  for (const old of document.querySelectorAll('[data-pdf-toolbox-scroller]')) delete old.dataset.pdfToolboxScroller;
+  const root = document.scrollingElement || document.documentElement;
+  if (root.scrollHeight - root.clientHeight > 50) return false;
+  let best = null;
+  let bestArea = 0;
+  for (const el of document.querySelectorAll('body *')) {
+    if (el.scrollHeight - el.clientHeight < 50 || el.clientHeight < innerHeight * 0.3) continue;
+    if (!/(auto|scroll|overlay)/.test(getComputedStyle(el).overflowY)) continue;
+    const r = el.getBoundingClientRect();
+    const area = Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
+    if (area > bestArea) (bestArea = area), (best = el);
+  }
+  if (best) best.dataset.pdfToolboxScroller = '';
+  return !!best;
+}
+
+function preparePage() {
+  const el = document.querySelector('[data-pdf-toolbox-scroller]');
+  const root = document.scrollingElement || document.documentElement;
+  // sem rolagem suave (a posição só mudaria depois da animação) nem transições
+  const style = document.createElement('style');
+  style.id = 'pdf-toolbox-freeze';
+  style.textContent = 'html, body, [data-pdf-toolbox-scroller] { scroll-behavior: auto !important; } *, *::before, *::after { transition: none !important; }';
+  document.documentElement.append(style);
+  for (const img of document.querySelectorAll('img[loading="lazy"]')) img.loading = 'eager';
+  let box = { x: 0, y: 0, w: root.clientWidth, h: innerHeight }; // clientWidth corta a barra de rolagem
+  if (el) {
+    const r = el.getBoundingClientRect();
+    const x = Math.max(0, r.left + el.clientLeft);
+    const y = Math.max(0, r.top + el.clientTop);
+    box = { x, y, w: Math.min(el.clientWidth, innerWidth - x), h: Math.min(el.clientHeight, innerHeight - y) };
+  }
+  return { vw: innerWidth, box, inner: !!el, total: (el || root).scrollHeight, startY: el ? el.scrollTop : scrollY };
+}
+
+// Rola até `top`, conclui animações de entrada e espera as imagens visíveis carregarem.
+async function scrollStep(top) {
+  const el = document.querySelector('[data-pdf-toolbox-scroller]');
+  const root = el || document.scrollingElement || document.documentElement;
+  if (el) el.scrollTop = top;
+  else scrollTo({ left: 0, top, behavior: 'instant' });
+  // requestAnimationFrame não dispara em aba oculta: o timeout evita ficar preso
+  const frame = () => new Promise((r) => (requestAnimationFrame(() => requestAnimationFrame(r)), setTimeout(r, 100)));
+  // animações finitas vão direto ao fim (conteúdo que surge ao rolar); as infinitas param, para o
+  // fundo não mudar entre as telas
+  const paused = (window.__pdfToolboxPaused ||= new Set());
+  const settle = () => {
+    for (const a of document.getAnimations()) {
+      try {
+        if (a.effect?.getComputedTiming().endTime === Infinity) {
+          if (a.playState === 'running') a.pause(), paused.add(a);
+        } else if (a.playState !== 'finished') a.finish();
+      } catch {}
+    }
+  };
+  await frame();
+  settle();
+  const deadline = performance.now() + 2000;
+  const loading = () =>
+    [...document.images].some((img) => {
+      if (img.complete) return false;
+      const r = img.getBoundingClientRect();
+      return r.width > 0 && r.bottom > 0 && r.top < innerHeight;
+    });
+  while (loading() && performance.now() < deadline) await new Promise((r) => setTimeout(r, 100));
+  await frame();
+  settle();
+  await frame();
+  return { y: el ? el.scrollTop : scrollY, total: root.scrollHeight };
+}
+
+// Depois da 1ª tela, esconde cabeçalhos fixos para não se repetirem no meio da imagem
+function hideFixed() {
+  const scroller = document.querySelector('[data-pdf-toolbox-scroller]');
+  for (const el of document.querySelectorAll('body *')) {
+    const cs = getComputedStyle(el);
+    if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
+    if (scroller && el.contains(scroller)) continue; // a moldura do app que contém o painel
+    // fundos fixos que cobrem a tela toda continuam (senão o resto da página fica sem fundo)
+    const r = el.getBoundingClientRect();
+    const isBackdrop = r.left <= 0 && r.top <= 0 && r.right >= innerWidth && r.bottom >= innerHeight;
+    if (isBackdrop && (parseInt(cs.zIndex, 10) < 0 || cs.pointerEvents === 'none')) continue;
+    el.dataset.pdfToolboxHidden = el.style.visibility;
+    el.style.visibility = 'hidden';
+  }
+}
+
+function restorePage(startY) {
+  for (const el of document.querySelectorAll('[data-pdf-toolbox-hidden]')) {
+    el.style.visibility = el.dataset.pdfToolboxHidden;
+    delete el.dataset.pdfToolboxHidden;
+  }
+  const el = document.querySelector('[data-pdf-toolbox-scroller]');
+  if (el) {
+    el.scrollTop = startY;
+    delete el.dataset.pdfToolboxScroller;
+  } else {
+    scrollTo({ left: 0, top: startY, behavior: 'instant' });
+  }
+  for (const a of window.__pdfToolboxPaused || []) a.play();
+  delete window.__pdfToolboxPaused;
+  document.getElementById('pdf-toolbox-freeze')?.remove();
+}
+
+// Página inteira sem a API debugger (bloqueada em alguns navegadores, como o Comet, e inútil
+// quando a página rola por dentro de um painel): rola, captura cada tela e junta tudo num canvas.
 async function stitchFullPage(tab) {
-  const m = await inTab(tab.id, () => {
-    const el = document.scrollingElement || document.documentElement;
-    // scrollbar: largura da barra de rolagem, cortada da imagem final
-    return { vw: innerWidth, vh: innerHeight, scrollbar: innerWidth - el.clientWidth, total: el.scrollHeight, startY: scrollY };
-  });
-  const total = Math.min(m.total, MAX_SHOT);
+  await inTab(tab.id, findScroller);
+  const m = await inTab(tab.id, preparePage);
+  const { box } = m;
   const shots = [];
+  let total = Math.min(m.total, MAX_SHOT);
+  let lastShot = 0;
   try {
-    for (let y = 0; ; y += m.vh) {
-      const actualY = await inTab(tab.id, (top) => {
-        scrollTo(0, top);
-        return scrollY;
-      }, [y]);
-      // depois da 1ª tela, esconde cabeçalhos fixos para não se repetirem no meio da imagem
-      if (shots.length === 1) {
-        await inTab(tab.id, () => {
-          for (const el of document.querySelectorAll('body *')) {
-            const pos = getComputedStyle(el).position;
-            if (pos === 'fixed' || pos === 'sticky') {
-              el.dataset.pdfToolboxHidden = el.style.visibility;
-              el.style.visibility = 'hidden';
-            }
-          }
-        });
-      }
-      await sleep(550); // captureVisibleTab permite ~2 capturas por segundo
+    for (let y = 0; ; y += box.h) {
+      const step = await inTab(tab.id, scrollStep, [y]);
+      total = Math.min(step.total, MAX_SHOT); // a página pode crescer ao carregar mais conteúdo
+      if (shots.length === 1) await inTab(tab.id, hideFixed);
+      await sleep(Math.max(0, lastShot + 550 - Date.now())); // captureVisibleTab permite ~2 capturas por segundo
       const dataUrl = await captureTab(tab.windowId);
-      shots.push({ y: actualY, bitmap: await createImageBitmap(await (await fetch(dataUrl)).blob()) });
-      if (actualY + m.vh >= total || actualY < y) break;
+      lastShot = Date.now();
+      shots.push({ y: step.y, bitmap: await createImageBitmap(await (await fetch(dataUrl)).blob()) });
+      if (step.y + box.h >= total || step.y < y) break;
     }
   } finally {
-    await inTab(tab.id, (startY) => {
-      for (const el of document.querySelectorAll('[data-pdf-toolbox-hidden]')) {
-        el.style.visibility = el.dataset.pdfToolboxHidden;
-        delete el.dataset.pdfToolboxHidden;
-      }
-      scrollTo(0, startY);
-    }, [m.startY]).catch(() => {});
+    await inTab(tab.id, restorePage, [m.startY]).catch(() => {});
   }
-  const ratio = shots[0].bitmap.width / m.vw;
-  const canvas = new OffscreenCanvas(Math.round((m.vw - Math.max(0, m.scrollbar)) * ratio), Math.round(Math.min(total, shots.at(-1).y + m.vh) * ratio));
+  const r = shots[0].bitmap.width / m.vw;
+  // painel que ocupa a largura toda: mantém o cabeçalho do app acima dele
+  const prefix = m.inner && box.w >= m.vw * 0.9 ? box.y : 0;
+  const height = prefix + Math.min(total, shots.at(-1).y + box.h);
+  const canvas = new OffscreenCanvas(Math.round(box.w * r), Math.round(height * r));
   const ctx = canvas.getContext('2d');
-  for (const s of shots) ctx.drawImage(s.bitmap, 0, Math.round(s.y * ratio));
+  if (prefix) ctx.drawImage(shots[0].bitmap, box.x * r, 0, box.w * r, prefix * r, 0, 0, box.w * r, prefix * r);
+  for (const s of shots) {
+    ctx.drawImage(s.bitmap, box.x * r, box.y * r, box.w * r, box.h * r, 0, Math.round((prefix + s.y) * r), box.w * r, box.h * r);
+  }
   return canvas;
 }
 
@@ -284,6 +391,7 @@ async function canvasToPdf(canvas) {
 
 const NOTE_IMAGE_PDF =
   'Este navegador bloqueia o PDF com texto; o PDF foi gerado como imagem. Para texto selecionável use Cmd+P → Salvar como PDF.';
+const NOTE_INNER_PDF = 'Esta página rola por dentro de um painel; o PDF foi gerado como imagem para incluir tudo.';
 
 async function capturePage(tab, mode) {
   const base = `${safeName(tab.title)} ${stamp()}`;
@@ -291,37 +399,43 @@ async function capturePage(tab, mode) {
     await download(await captureTab(tab.windowId), `${base}.png`);
     return {};
   }
+  // página que rola por dentro de um painel: printToPDF e captureBeyondViewport só pegam a parte visível
+  const inner = await inTab(tab.id, findScroller).catch(() => false);
   if (mode === 'pdf') {
-    try {
-      const { data } = await withDebugger(tab.id, (send) =>
-        send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true })
-      );
-      await download(`data:application/pdf;base64,${data}`, `${base}.pdf`);
-      return {};
-    } catch (e) {
-      console.info('printToPDF indisponível, usando captura por rolagem', e);
+    if (!inner) {
+      try {
+        const { data } = await withDebugger(tab.id, (send) =>
+          send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true })
+        );
+        await download(`data:application/pdf;base64,${data}`, `${base}.pdf`);
+        return {};
+      } catch (e) {
+        console.info('printToPDF indisponível, usando captura por rolagem', e);
+      }
     }
     await download(await canvasToPdf(await stitchFullPage(tab)), `${base}.pdf`);
-    return { note: NOTE_IMAGE_PDF };
+    return { note: inner ? NOTE_INNER_PDF : NOTE_IMAGE_PDF };
   }
   if (mode === 'png') {
-    try {
-      const { data } = await withDebugger(tab.id, async (send) => {
-        const m = await send('Page.getLayoutMetrics');
-        const content = m.cssContentSize || m.contentSize;
-        const width = Math.ceil(content.width);
-        const height = Math.min(Math.ceil(content.height), MAX_SHOT);
-        const scale = Math.max(0.5, Math.min(2, MAX_SHOT / height, MAX_SHOT / width));
-        return send('Page.captureScreenshot', {
-          format: 'png',
-          captureBeyondViewport: true,
-          clip: { x: 0, y: 0, width, height, scale },
+    if (!inner) {
+      try {
+        const { data } = await withDebugger(tab.id, async (send) => {
+          const m = await send('Page.getLayoutMetrics');
+          const content = m.cssContentSize || m.contentSize;
+          const width = Math.ceil(content.width);
+          const height = Math.min(Math.ceil(content.height), MAX_SHOT);
+          const scale = Math.max(0.5, Math.min(2, MAX_SHOT / height, MAX_SHOT / width));
+          return send('Page.captureScreenshot', {
+            format: 'png',
+            captureBeyondViewport: true,
+            clip: { x: 0, y: 0, width, height, scale },
+          });
         });
-      });
-      await download(`data:image/png;base64,${data}`, `${base}.png`);
-      return {};
-    } catch (e) {
-      console.info('captureScreenshot indisponível, usando captura por rolagem', e);
+        await download(`data:image/png;base64,${data}`, `${base}.png`);
+        return {};
+      } catch (e) {
+        console.info('captureScreenshot indisponível, usando captura por rolagem', e);
+      }
     }
     const canvas = await stitchFullPage(tab);
     await download(await blobToDataUrl(await canvas.convertToBlob({ type: 'image/png' })), `${base}.png`);

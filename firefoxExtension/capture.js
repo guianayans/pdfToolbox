@@ -192,7 +192,7 @@
     let dy = 0;
     if (mouse.y > innerHeight - EDGE) dy = Math.min(EDGE, mouse.y - (innerHeight - EDGE));
     else if (mouse.y < EDGE) dy = -Math.min(EDGE, EDGE - mouse.y);
-    if (dy) scrollBy(0, Math.ceil(Math.abs(dy) / 2.5) * Math.sign(dy));
+    if (dy) scrollBy({ top: Math.ceil(Math.abs(dy) / 2.5) * Math.sign(dy), behavior: 'instant' });
     requestAnimationFrame(autoScroll);
   }
 
@@ -262,24 +262,54 @@
     return img;
   }
 
+  // Animações finitas vão direto ao fim (conteúdo que surge ao rolar não sai invisível); as
+  // infinitas param enquanto a seleção é capturada, para o fundo não mudar entre os trechos
+  let paused = [];
+  function settle() {
+    for (const a of document.getAnimations()) {
+      try {
+        if (a.effect?.getComputedTiming().endTime === Infinity) {
+          if (a.playState === 'running') a.pause(), paused.push(a);
+        } else if (a.playState !== 'finished') a.finish();
+      } catch {}
+    }
+  }
+
+  function resumeAnimations() {
+    paused.forEach((a) => a.play());
+    paused = [];
+  }
+
   async function scrollToY(y) {
-    scrollTo(scrollX, y);
+    scrollTo({ left: scrollX, top: y, behavior: 'instant' }); // ignora scroll-behavior: smooth do site
+    await nextFrame();
+    settle();
     await nextFrame();
     return scrollY;
   }
 
-  // Cabeçalhos fixos/sticky se repetiriam em cada trecho: some com eles após o 1º trecho
+  // Cabeçalhos fixos/sticky se repetiriam em cada trecho: some com eles após o 1º trecho.
+  // Também desliga transições, para conteúdo que aparece com fade ao rolar não sair transparente.
   function hideFixed() {
     const hidden = [];
     for (const el of document.querySelectorAll('body *')) {
       if (el === host) continue;
-      const pos = getComputedStyle(el).position;
-      if (pos === 'fixed' || pos === 'sticky') {
-        hidden.push([el, el.style.visibility]);
-        el.style.visibility = 'hidden';
-      }
+      const cs = getComputedStyle(el);
+      if (cs.position !== 'fixed' && cs.position !== 'sticky') continue;
+      // fundos fixos que cobrem a tela toda continuam (senão o resto fica sem fundo)
+      const r = el.getBoundingClientRect();
+      const isBackdrop = r.left <= 0 && r.top <= 0 && r.right >= innerWidth && r.bottom >= innerHeight;
+      if (isBackdrop && (parseInt(cs.zIndex, 10) < 0 || cs.pointerEvents === 'none')) continue;
+      hidden.push([el, el.style.visibility]);
+      el.style.visibility = 'hidden';
     }
-    return () => hidden.forEach(([el, v]) => (el.style.visibility = v));
+    const freeze = document.createElement('style');
+    freeze.textContent = '*, *::before, *::after { transition: none !important; }';
+    document.documentElement.append(freeze);
+    return () => {
+      hidden.forEach(([el, v]) => (el.style.visibility = v));
+      freeze.remove();
+    };
   }
 
   async function captureRect() {
@@ -329,6 +359,7 @@
     } catch (e) {
       host.style.display = '';
       restoreFixed();
+      resumeAnimations();
       hint.hidden = false;
       hint.textContent = `Não foi possível capturar: ${e.message || e}`;
       setTimeout(cleanup, 3000);
@@ -336,6 +367,7 @@
     }
     restoreFixed();
     await scrollToY(endScrollY);
+    resumeAnimations();
     host.style.display = '';
     drawBox();
 

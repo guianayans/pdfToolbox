@@ -188,6 +188,8 @@ export function initAnnotator(d) {
   });
   const layer = $('#edLayer');
   layer.addEventListener('pointerdown', onPointerDown);
+  // o Firefox ainda dispara o mousedown depois do pointerdown e tira o foco do texto recém-criado
+  layer.addEventListener('mousedown', (e) => !e.target.isContentEditable && e.preventDefault());
   document.addEventListener('keydown', (e) => {
     if ($('#editView').hidden) return;
     if (e.target.isContentEditable || e.target.matches('input, select, textarea')) {
@@ -272,7 +274,7 @@ function setTool(t) {
   $('#edStage').dataset.tool = t;
   $('#edHint').textContent = {
     select: 'Clique em um item para selecioná-lo e arraste para mover. Duplo clique em um texto para editar.',
-    edittext: 'Clique em um trecho do documento para reescrevê-lo.',
+    edittext: 'Clique em um trecho do documento para reescrevê-lo. Trechos já editados podem ser clicados de novo.',
     text: 'Clique onde o texto deve começar.',
     cover: 'Arraste sobre o que deseja apagar (a área é coberta com a cor do fundo; selecione-a e mude a cor se quiser).',
     highlight: 'Arraste sobre o trecho que deseja destacar.',
@@ -508,10 +510,19 @@ function onPointerDown(ev) {
   }
 
   if (tool === 'edittext') {
+    // trecho já editado (ou texto adicionado): reabre a edição dele
+    const textEl = target.closest('.ed-text[data-id]');
     const lineEl = target.closest('.ed-line');
-    if (!lineEl) return;
+    // termina a edição em andamento antes de redesenhar a camada (e ao clicar fora)
+    if (document.activeElement?.isContentEditable) document.activeElement.blur();
+    if (!textEl && !lineEl) return;
     ev.preventDefault();
-    editExistingLine(Number(lineEl.dataset.line));
+    if (textEl) {
+      const e = pageEdits().find((it) => it.id === Number(textEl.dataset.id));
+      if (e) editText(e);
+    } else {
+      editExistingLine(Number(lineEl.dataset.line));
+    }
     return;
   }
 
@@ -679,7 +690,8 @@ function editExistingLine(i) {
   };
   pushUndo();
   pageEdits().push(e);
-  setTool('select');
+  // continua em "Editar texto" para o próximo trecho
+  drawLayer();
   editText(e);
 }
 

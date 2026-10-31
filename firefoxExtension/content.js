@@ -6,6 +6,8 @@
 
   const MAX = 200;
   const found = new Map();
+  let changes = 0;
+  let sent = 0;
 
   const nameFromUrl = (url) => {
     try {
@@ -34,16 +36,41 @@
     } catch {
       return;
     }
-    if (!/^(https?:|blob:)/.test(url) || found.has(url)) return;
-    let finalName = (name || '').trim() || nameFromUrl(url) || 'documento';
+    // arquivo em blob: cujo nome só chegou depois: atualiza o nome
+    if (!/^(https?:|blob:)/.test(url) || (found.has(url) && !(name && found.get(url).rename))) return;
+    let finalName = (name || '').trim() || (url.startsWith('blob:') ? '' : nameFromUrl(url)) || 'documento';
     if (kind === 'pdf' && !/\.pdf$/i.test(finalName)) finalName += '.pdf';
     if (kind === 'word' && !/\.docx?$/i.test(finalName)) finalName += '.docx';
-    found.set(url, { url, name: finalName, source, kind });
+    if (found.get(url)?.name === finalName) return;
+    found.set(url, { url, name: finalName, source, kind, rename: !name && url.startsWith('blob:') });
+    changes++;
+  }
+
+  // blobs de PDF/Word criados pela página (WhatsApp Web etc.), avisados pelo page-hook.js
+  const HOOK = 'pdf-toolbox-hook';
+  const waiting = new Map();
+  window.addEventListener('message', (e) => {
+    if (e.source !== window || !e.data?.[HOOK]) return;
+    const d = e.data;
+    if (d[HOOK] === 'found' && typeof d.url === 'string' && d.url.startsWith('blob:')) {
+      add(d.url, typeof d.name === 'string' ? d.name : '', 'página', d.kind === 'word' ? 'word' : 'pdf');
+      schedule();
+    } else if (d[HOOK] === 'blob' && waiting.has(d.id)) {
+      waiting.get(d.id)(d.blob instanceof Blob ? d.blob : null);
+      waiting.delete(d.id);
+    }
+  });
+
+  function blobFromPage(url) {
+    return new Promise((resolve) => {
+      const id = Math.random().toString(36).slice(2);
+      waiting.set(id, resolve);
+      window.postMessage({ [HOOK]: 'get', id, url }, '*');
+      setTimeout(() => waiting.delete(id) && resolve(null), 3000);
+    });
   }
 
   function scan() {
-    const before = found.size;
-
     // Gmail: chips de anexo têm download_url="mime:nome:url"
     document.querySelectorAll('[download_url]').forEach((el) => {
       const m = (el.getAttribute('download_url') || '').match(/^([^:]+):([^:]+):(.+)$/);
@@ -64,7 +91,8 @@
 
     if (document.contentType === 'application/pdf') add(location.href, null, 'página');
 
-    if (found.size !== before) {
+    if (changes !== sent) {
+      sent = changes;
       try {
         chrome.runtime.sendMessage({ type: 'pdfs-found', items: [...found.values()] }).catch(() => {});
       } catch {
@@ -105,6 +133,12 @@
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.arrayBuffer();
+      })
+      .catch(async (e) => {
+        // link blob: já revogado pela página: usa a cópia guardada pelo page-hook.js
+        const blob = msg.url.startsWith('blob:') && (await blobFromPage(msg.url));
+        if (!blob) throw e;
+        return blob.arrayBuffer();
       })
       .then((buf) => sendResponse({ data: toBase64(buf) }))
       .catch((e) => sendResponse({ error: String(e.message || e) }));
