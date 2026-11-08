@@ -57,6 +57,7 @@ Recebeu uma fatura de 9 páginas no e-mail e só precisa de uma? Quer o PDF em i
   - Encoste o mouse na borda (ou use a rodinha) para rolar a página enquanto seleciona
   - Ajuste depois de soltar: arraste os cantos/bordas para redimensionar ou o meio para mover
   - **⌘C / Ctrl+C** copia a seleção. A extensão pergunta PNG ou PDF; marque **Lembrar minha escolha** para não perguntar mais (dá para mudar em ⚙️ Configurações, no rodapé do popup). PDF é salvo em Downloads, porque o navegador não permite copiar PDF
+  - **Texto** copia o texto que está dentro da área. Se for texto da página, ele é copiado direto; se for imagem (print, foto, PDF, vídeo), o texto é lido por **OCR no próprio computador** (português e inglês, nada é enviado para a internet) e mostrado para você conferir
 - **📄 Página inteira em PDF**: a página toda, dividida em folhas A4
 - **🖼️ Página inteira em PNG**: uma imagem única, rolando até o fim
 - **🖥️ Área visível**: PNG do que está na tela
@@ -134,6 +135,7 @@ Política completa: [guianayans.github.io/pdfToolbox/privacidade.html](https://g
 | `storage` | Guardar a lista de PDFs da sessão |
 | `downloads` | Salvar os arquivos gerados |
 | `scripting` | Injetar a ferramenta de seleção de área |
+| `offscreen` | Rodar o OCR (leitura de texto em imagens) num documento oculto da extensão |
 
 ## 🧩 Como funciona
 
@@ -162,6 +164,7 @@ Política completa: [guianayans.github.io/pdfToolbox/privacidade.html](https://g
 | `content.js` | Varre o DOM atrás de PDFs (Gmail, links, embeds) e baixa no contexto da página quando preciso |
 | `page-hook.js` | Roda no contexto da página e registra PDFs/Word criados como `blob:` ou recebidos por `postMessage` (visualizador do WhatsApp Web), guardando uma cópia |
 | `capture.js` | Overlay de seleção de área (Shadow DOM, sem interferir no site) |
+| `ocr.*` | OCR local do texto da área selecionada (documento offscreen) |
 | `popup.*` | Lista de PDFs e opções de captura |
 | `editor.*` | Editor: miniaturas, organização e exportações |
 | `annotate.js` | Editor de conteúdo (texto, apagar, destacar, desenho, imagem) e aplicação das edições |
@@ -202,6 +205,7 @@ Bibliotecas incluídas em `lib/`, com suas respectivas licenças:
 | [JSZip](https://github.com/Stuk/jszip) 3.10.1 | Gerar arquivos .zip e .docx | MIT / GPLv3 (usado sob MIT) |
 | [docx-preview](https://github.com/VolodymyrBaydalka/docxjs) 0.3.7 | Exibir documentos Word | Apache-2.0 |
 | [html2canvas](https://github.com/niklasvh/html2canvas) 1.4.1 | Desenhar as páginas do Word para gerar o PDF | MIT |
+| [Tesseract.js](https://github.com/naptha/tesseract.js) 7.0.0 + dados `por`/`eng` (4.0.0_best_int) | OCR do texto da área selecionada (`lib/ocr/`) | Apache-2.0 |
 
 ## 📄 Licença
 

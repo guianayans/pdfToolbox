@@ -79,7 +79,7 @@ Used to clear the per-tab list of detected documents when the user navigates to 
 
 `storage`
 ```
-chrome.storage.session keeps the per-tab list of detected documents (cleared when the browser closes). chrome.storage.local keeps one user preference (copy format: PNG or PDF).
+chrome.storage.session keeps the per-tab list of detected documents (cleared when the browser closes). chrome.storage.local keeps one user preference (copy format: PNG, PDF or text).
 ```
 
 `downloads`
@@ -90,6 +90,11 @@ Saves files the user explicitly creates or asks to download: edited PDFs, conver
 `scripting`
 ```
 Injects the area-selection overlay into the current tab when the user clicks "Select area" or presses the keyboard shortcut, and runs a helper during full-page capture to scroll the page and measure its height.
+```
+
+`offscreen`
+```
+Runs optical character recognition (Tesseract.js, bundled with the extension) in a hidden extension document when the user clicks "Text" on a selected area that contains an image. Service workers cannot start the Web Worker the OCR engine needs. The image is processed locally and never leaves the computer.
 ```
 
 **Permissão de host (`<all_urls>`):**

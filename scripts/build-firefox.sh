@@ -9,14 +9,14 @@ OUT=firefoxExtension
 rm -rf "$OUT"
 mkdir -p "$OUT"
 cp -R background.js capture.js content.js editor.css editor.html editor.js \
-  annotate.js docx2pdf.js fetch-file.js page-hook.js pdf2docx.js word.css word.html word.js \
+  annotate.js docx2pdf.js ocr.html ocr.js fetch-file.js page-hook.js pdf2docx.js word.css word.html word.js \
   options.css options.html options.js popup.css popup.html popup.js icons lib LICENSE "$OUT/"
 
 node -e '
 const fs = require("fs");
 const m = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
-m.background = { scripts: ["lib/pdf-lib.min.js", "background.js"] };
-m.permissions = m.permissions.filter((p) => p !== "debugger");
+m.background = { scripts: ["lib/pdf-lib.min.js", "lib/ocr/tesseract.min.js", "ocr.js", "background.js"] };
+m.permissions = m.permissions.filter((p) => p !== "debugger" && p !== "offscreen");
 m.browser_specific_settings = {
   gecko: {
     id: "pdftoolbox@guianayans",

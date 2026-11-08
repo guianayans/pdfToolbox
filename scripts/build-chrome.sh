@@ -8,6 +8,6 @@ OUT="dist/pdf_toolbox-$VERSION.zip"
 mkdir -p dist
 rm -f "$OUT"
 zip -qr -X "$OUT" manifest.json LICENSE background.js capture.js content.js editor.css editor.html editor.js \
-  annotate.js docx2pdf.js fetch-file.js page-hook.js pdf2docx.js word.css word.html word.js \
+  annotate.js docx2pdf.js ocr.html ocr.js fetch-file.js page-hook.js pdf2docx.js word.css word.html word.js \
   options.css options.html options.js popup.css popup.html popup.js icons lib -x '*.DS_Store'
 echo "Pronto: $OUT"

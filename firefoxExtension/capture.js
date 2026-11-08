@@ -61,6 +61,11 @@
       .ask .row button { flex: 1; }
       .ask label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
       .ask small { color: rgba(255, 255, 255, 0.6); font-size: 11px; }
+      .out { color: #fff; padding: 6px 6px 4px; display: grid; gap: 6px; width: min(420px, 80vw); }
+      .out textarea {
+        width: 100%; height: 160px; resize: vertical; border: 0; border-radius: 6px; padding: 8px;
+        background: rgba(255, 255, 255, 0.95); color: #111; font: 13px/1.4 system-ui, sans-serif;
+      }
       [hidden] { display: none !important; }
     </style>
     <div class="layer">
@@ -74,6 +79,7 @@
           <button data-act="png">PNG</button>
           <button data-act="jpg">JPG</button>
           <button data-act="pdf">PDF</button>
+          <button data-act="text" title="Copiar o texto da área (lê imagens também)">Texto</button>
           <button data-act="copy" title="Copiar (${navigator.platform.startsWith('Mac') ? '⌘C' : 'Ctrl+C'})">Copiar</button>
           <button data-act="redo" class="ghost" title="Selecionar de novo">Refazer</button>
           <button data-act="close" class="ghost" title="Cancelar (Esc)">✕</button>
@@ -83,10 +89,16 @@
           <div class="row">
             <button data-copy="png" title="Copia a imagem para a área de transferência">PNG</button>
             <button data-copy="pdf" title="O navegador não deixa copiar PDF: o arquivo vai para Downloads">PDF</button>
+            <button data-copy="text" title="Copia o texto da área (lê imagens também)">Texto</button>
           </div>
           <label><input type="checkbox" class="remember"> Lembrar minha escolha</label>
           <small>PDF não pode ir para a área de transferência: ele é salvo em Downloads.<br>
           A escolha lembrada pode ser mudada nas configurações da extensão.</small>
+        </div>
+        <div class="out" hidden>
+          <span class="out-msg"></span>
+          <textarea spellcheck="false"></textarea>
+          <div class="row"><button data-act="copy-out">Copiar</button><button data-act="close" class="ghost">Fechar</button></div>
         </div>
       </div>
     </div>`;
@@ -98,8 +110,10 @@
   const size = root.querySelector('.size');
   const bar = root.querySelector('.bar');
   const ask = root.querySelector('.ask');
+  const out = root.querySelector('.out');
+  const outText = out.querySelector('textarea');
 
-  // formato de cópia lembrado: 'ask' (perguntar), 'png' ou 'pdf'
+  // formato de cópia lembrado: 'ask' (perguntar), 'png', 'pdf' ou 'text'
   let copyFormat = 'ask';
   chrome.storage.local.get('copyFormat').then((r) => (copyFormat = r.copyFormat || 'ask'), () => {});
   const onPrefs = (changes) => changes.copyFormat && (copyFormat = changes.copyFormat.newValue || 'ask');
@@ -131,6 +145,9 @@
       e.stopPropagation();
       if (!ask.hidden) closeAsk();
       else cleanup();
+    } else if (!out.hidden) {
+      // no painel do texto, os atalhos de edição/cópia funcionam normalmente
+      e.stopPropagation();
     } else if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c') {
       // Cmd+C / Ctrl+C copia a seleção (em vez do texto da página)
       e.preventDefault();
@@ -179,7 +196,8 @@
   function reset() {
     rect = cropped = drag = null;
     box.hidden = bar.hidden = true;
-    ask.hidden = true;
+    ask.hidden = out.hidden = true;
+    root.querySelector('.btns').hidden = false;
     hint.hidden = false;
     hint.textContent = HINT;
     layer.classList.remove('has-box', 'done');
@@ -405,7 +423,7 @@
 
   // Copiar: pergunta PNG ou PDF, a não ser que haja uma escolha lembrada
   function copy() {
-    if (copyFormat === 'png' || copyFormat === 'pdf') return copyAs(copyFormat);
+    if (['png', 'pdf', 'text'].includes(copyFormat)) return copyAs(copyFormat);
     ask.hidden = false;
     root.querySelector('.remember').checked = false;
     placeBar();
@@ -413,6 +431,7 @@
 
   async function copyAs(format) {
     if (format === 'pdf') return save('pdf', 'PDF salvo em Downloads ✓ (o navegador não permite copiar PDF)');
+    if (format === 'text') return copyText();
     try {
       // o blob vai como promessa para a escrita acontecer ainda dentro do gesto do usuário
       const blob = new Promise((ok) => cropped.toBlob(ok, 'image/png'));
@@ -431,6 +450,180 @@
     flash(res?.error ? `Erro: ${res.error}` : okMsg);
   }
 
+  // ---- Copiar texto ----
+
+  // Texto de verdade da página dentro da área: cada caractere cujo centro cai na seleção.
+  // As quebras de linha seguem a posição na tela (assim colunas ao lado não entram).
+  function domText() {
+    const L = rect.x;
+    const R = rect.x + rect.w;
+    const T = rect.y - scrollY;
+    const B = T + rect.h;
+    const hits = (r) => r.right > L && r.left < R && r.bottom > T && r.top < B;
+    const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT, {
+      acceptNode(n) {
+        if (!n.data.trim() || host.contains(n)) return NodeFilter.FILTER_REJECT;
+        const tag = n.parentElement?.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEXTAREA') return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    // bloco (parágrafo, célula, item…) do texto: quebra de linha dentro do mesmo bloco vira espaço
+    const blockOf = (el) => {
+      for (; el && el !== document.body; el = el.parentElement) {
+        const d = getComputedStyle(el).display;
+        if (!d.startsWith('inline') && d !== 'contents') return el;
+      }
+      return el;
+    };
+    const range = document.createRange();
+    let text = '';
+    let lastBlock = null;
+    let last = null; // retângulo do último caractere incluído
+    let gap = false; // havia espaço/quebra entre ele e o próximo
+    let budget = 300000;
+    for (let n = walker.nextNode(); n && budget > 0; n = walker.nextNode()) {
+      range.selectNodeContents(n);
+      if (![...range.getClientRects()].some(hits)) {
+        if (last) gap = true;
+        continue;
+      }
+      const str = n.data;
+      const block = blockOf(n.parentElement);
+      for (let i = 0; i < str.length && budget-- > 0; i++) {
+        const ch = str[i];
+        if (/\s/.test(ch)) {
+          if (last) gap = true;
+          continue;
+        }
+        // pares substitutos (emoji etc.) vão juntos
+        const len = ch.charCodeAt(0) >= 0xd800 && ch.charCodeAt(0) <= 0xdbff ? 2 : 1;
+        range.setStart(n, i);
+        range.setEnd(n, i + len);
+        const r = range.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        if (!r.width || cx < L || cx > R || cy < T || cy > B) {
+          if (last) gap = true;
+          i += len - 1;
+          continue;
+        }
+        if (last) {
+          const newLine = r.top >= last.bottom - Math.min(r.height, last.height) * 0.4 || r.right < last.left;
+          const pre = /^pre/.test(getComputedStyle(n.parentElement).whiteSpace);
+          if (newLine) text += block === lastBlock && !pre ? ' ' : '\n';
+          else if (gap || r.left - last.right > r.height * 0.25) text += ' ';
+        }
+        text += str.slice(i, i + len);
+        last = r;
+        lastBlock = block;
+        gap = false;
+        i += len - 1;
+      }
+    }
+    return text.trim();
+  }
+
+  // Imagens, canvas, vídeos, PDFs embutidos e iframes cobrindo boa parte da área: aí o OCR é melhor
+  function mediaShare() {
+    const T = rect.y - scrollY;
+    let area = 0;
+    for (const el of document.querySelectorAll('img, canvas, video, svg, embed, object, iframe, picture')) {
+      const r = el.getBoundingClientRect();
+      const w = Math.min(r.right, rect.x + rect.w) - Math.max(r.left, rect.x);
+      const h = Math.min(r.bottom, T + rect.h) - Math.max(r.top, T);
+      if (w > 0 && h > 0) area = Math.max(area, w * h);
+    }
+    return area / (rect.w * rect.h);
+  }
+
+  // Recorte ampliado para o OCR (texto pequeno é lido melhor com mais pixels)
+  function ocrImage() {
+    const f = Math.min(3, Math.max(1, (2 * rect.w) / cropped.width), 8000 / cropped.width, 8000 / cropped.height);
+    if (f <= 1.05) return cropped.toDataURL('image/png');
+    const c = document.createElement('canvas');
+    c.width = Math.round(cropped.width * f);
+    c.height = Math.round(cropped.height * f);
+    const g = c.getContext('2d');
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(cropped, 0, 0, c.width, c.height);
+    return c.toDataURL('image/png');
+  }
+
+  async function readText() {
+    const fromPage = domText();
+    if (fromPage && mediaShare() < 0.3) return { text: fromPage, ocr: false };
+    const res = await chrome.runtime
+      .sendMessage({ type: 'ocr', dataUrl: ocrImage() })
+      .catch((e) => ({ error: String(e.message || e) }));
+    if (res?.error) {
+      if (fromPage) return { text: fromPage, ocr: false };
+      throw new Error(res.error);
+    }
+    // a imagem não tinha texto legível, mas a página tinha
+    if (!res.text && fromPage) return { text: fromPage, ocr: false };
+    return { text: res.text || '', ocr: true };
+  }
+
+  function showOut(msg, text) {
+    root.querySelector('.btns').hidden = true;
+    ask.hidden = true;
+    root.querySelector('.out-msg').textContent = msg;
+    outText.value = text;
+    out.hidden = false;
+    hint.hidden = true;
+    bar.hidden = false;
+    placeBar();
+    outText.focus();
+    outText.select();
+  }
+
+  function copyText() {
+    bar.hidden = true;
+    hint.hidden = false;
+    hint.textContent = 'Lendo o texto…';
+    const job = readText();
+    // a escrita começa agora, dentro do clique, e espera o texto (o OCR pode levar alguns segundos)
+    const blob = job.then(({ text }) => {
+      if (!text) throw new Error('vazio');
+      return new Blob([text], { type: 'text/plain' });
+    });
+    let copied;
+    try {
+      copied = navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+    } catch (e) {
+      copied = Promise.reject(e);
+    }
+    Promise.allSettled([job, copied]).then(([r, c]) => {
+      if (r.status === 'rejected') {
+        hint.textContent = `Não foi possível ler o texto: ${r.reason?.message || r.reason}`;
+        return void setTimeout(cleanup, 3500);
+      }
+      const { text, ocr } = r.value;
+      if (!text) {
+        hint.textContent = 'Nenhum texto encontrado nesta área.';
+        return void setTimeout(cleanup, 2500);
+      }
+      if (c.status === 'fulfilled') {
+        if (!ocr) return flash('Texto copiado ✓');
+        // texto lido da imagem: mostra para conferir (o OCR pode errar alguma letra)
+        return showOut('Texto copiado ✓ — lido da imagem, confira:', text);
+      }
+      showOut('O site não deixou copiar sozinho. Use o botão abaixo ou ⌘/Ctrl+C:', text);
+    });
+  }
+
+  async function copyOut() {
+    try {
+      await navigator.clipboard.writeText(outText.value);
+      flash('Texto copiado ✓');
+    } catch {
+      outText.focus();
+      outText.select();
+      document.execCommand('copy') ? flash('Texto copiado ✓') : (root.querySelector('.out-msg').textContent = 'Selecione e use ⌘/Ctrl+C.');
+    }
+  }
+
   bar.addEventListener('click', (e) => {
     const format = e.target.closest('[data-copy]')?.dataset.copy;
     if (format) {
@@ -442,6 +635,8 @@
     if (act === 'close') return cleanup();
     if (act === 'redo') return reset();
     if (act === 'copy') return copy();
+    if (act === 'text') return copyText();
+    if (act === 'copy-out') return copyOut();
     save(act);
   });
 })();

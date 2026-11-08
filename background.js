@@ -422,6 +422,24 @@ async function saveCrop({ format, dataUrl, width, height, title }) {
   return download(await doc.saveAsBase64({ dataUri: true }), `${base}.pdf`);
 }
 
+// OCR: no Chrome/Comet num documento offscreen (ocr.html); no Firefox, ocr.js já está nesta página
+let offscreenReady = null;
+async function runOcr(dataUrl) {
+  if (!chrome.offscreen) return { text: await self.pdfToolboxOcr(dataUrl) };
+  offscreenReady ??= (async () => {
+    if (await chrome.offscreen.hasDocument?.()) return;
+    await chrome.offscreen.createDocument({
+      url: 'ocr.html',
+      reasons: ['WORKERS'],
+      justification: 'Ler localmente (OCR) o texto da área selecionada pelo usuário',
+    });
+  })().finally(() => (offscreenReady = null));
+  await offscreenReady;
+  const res = await chrome.runtime.sendMessage({ target: 'ocr', dataUrl });
+  if (!res || res.error) throw new Error(res?.error || 'o OCR não respondeu');
+  return res;
+}
+
 function friendlyError(e) {
   const msg = String(e?.message || e);
   if (/cannot (access|attach|be scripted)|chrome:\/\/|extensions gallery|webstore|comet:\/\/|policy/i.test(msg)) {
@@ -464,6 +482,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return reply(captureTab(sender.tab.windowId).then((dataUrl) => ({ dataUrl })));
   }
   if (msg.type === 'save-crop') return reply(saveCrop(msg).then(() => ({ ok: true })));
+  if (msg.type === 'ocr') return reply(runOcr(msg.dataUrl));
 
   if (msg.type === 'pdfs-found' && sender.tab) {
     addItems(
