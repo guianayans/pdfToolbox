@@ -118,6 +118,8 @@ Sem seleção, as ações de converter, dividir, extrair texto e extras valem pa
 
 ## 🔒 Privacidade
 
+Política completa: [guianayans.github.io/pdfToolbox/privacidade.html](https://guianayans.github.io/pdfToolbox/privacidade.html)
+
 - **Todo o processamento é local**, feito no seu navegador. Nenhum arquivo é enviado para servidores.
 - Não há analytics, rastreamento nem chamadas para serviços externos.
 - A lista de PDFs detectados fica em `chrome.storage.session`, que é apagado quando o navegador fecha.
@@ -129,11 +131,9 @@ Sem seleção, as ações de converter, dividir, extrair texto e extras valem pa
 | `<all_urls>` (host) | Encontrar PDFs em qualquer site e baixá-los com a sua sessão |
 | `webRequest` | Identificar respostas de rede que são PDFs (só leitura de cabeçalhos) |
 | `webNavigation` | Limpar a lista quando você muda de página |
-| `tabs` | Saber qual aba está ativa e abrir o editor |
 | `storage` | Guardar a lista de PDFs da sessão |
 | `downloads` | Salvar os arquivos gerados |
 | `scripting` | Injetar a ferramenta de seleção de área |
-| `debugger` | Gerar o PDF/PNG de página inteira com o motor nativo do navegador (só quando você pede) |
 
 ## 🧩 Como funciona
 
@@ -172,8 +172,8 @@ Sem seleção, as ações de converter, dividir, extrair texto e extras valem pa
 
 ## ⚠️ Limitações conhecidas
 
-- **Comet:** o navegador bloqueia a API `debugger` para extensões. Por isso, "página inteira" é feita rolando e capturando a página em partes, e o **PDF sai como imagem** (texto não selecionável). Para PDF com texto, use `Cmd+P → Salvar como PDF`. No Chrome, o PDF é gerado com o motor nativo e mantém o texto.
-- **Firefox:** não tem a API `debugger`, então funciona como no Comet: "página inteira" é feita por rolagem e o PDF sai como imagem. Se o atalho `Cmd+Shift+S` conflitar com o de captura de tela do Firefox, troque em `about:addons` → ⚙️ → **Gerenciar atalhos de extensões**.
+- **Página inteira:** é feita rolando e capturando a página em partes, então o **PDF sai como imagem** (texto não selecionável). Para PDF com texto, use `Cmd/Ctrl+P → Salvar como PDF`. A versão antiga com a API `debugger` (PDF nativo com texto, só Chrome) está na tag [`v1.3.0-debugger`](https://github.com/guianayans/pdfToolbox/tree/v1.3.0-debugger).
+- **Firefox:** Se o atalho `Cmd+Shift+S` conflitar com o de captura de tela do Firefox, troque em `about:addons` → ⚙️ → **Gerenciar atalhos de extensões**.
 - **Sites que rolam por dentro de um painel** (o Gmail é um exemplo): "página inteira" rola e captura o painel principal (o maior que rola), como imagem. Menus laterais fora dele ficam de fora.
 - **Conteúdo carregado sob demanda** (listas infinitas, dados que chegam ao rolar): a captura espera as imagens visíveis carregarem (até 2 s por tela), mas conteúdo que demora mais pode não aparecer.
 - **Comprimir** transforma as páginas em imagem.

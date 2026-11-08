@@ -190,16 +190,6 @@ async function download(url, filename) {
   }
 }
 
-async function withDebugger(tabId, fn) {
-  const target = { tabId };
-  await chrome.debugger.attach(target, '1.3');
-  try {
-    return await fn((method, params) => chrome.debugger.sendCommand(target, method, params));
-  } finally {
-    await chrome.debugger.detach(target).catch(() => {});
-  }
-}
-
 const MAX_SHOT = 16000; // limite prático de altura/largura de uma captura em pixels
 
 function bufferToBase64(buffer) {
@@ -338,8 +328,7 @@ function restorePage(startY) {
   document.getElementById('pdf-toolbox-freeze')?.remove();
 }
 
-// Página inteira sem a API debugger (bloqueada em alguns navegadores, como o Comet, e inútil
-// quando a página rola por dentro de um painel): rola, captura cada tela e junta tudo num canvas.
+// Página inteira: rola (a página ou o painel interno que rola), captura cada tela e junta tudo num canvas.
 async function stitchFullPage(tab) {
   await inTab(tab.id, findScroller);
   const m = await inTab(tab.id, preparePage);
@@ -390,8 +379,7 @@ async function canvasToPdf(canvas) {
 }
 
 const NOTE_IMAGE_PDF =
-  'Este navegador bloqueia o PDF com texto; o PDF foi gerado como imagem. Para texto selecionável use Cmd+P → Salvar como PDF.';
-const NOTE_INNER_PDF = 'Esta página rola por dentro de um painel; o PDF foi gerado como imagem para incluir tudo.';
+  'O PDF foi gerado como imagem da página. Para texto selecionável use Cmd/Ctrl+P → Salvar como PDF.';
 
 async function capturePage(tab, mode) {
   const base = `${safeName(tab.title)} ${stamp()}`;
@@ -399,44 +387,11 @@ async function capturePage(tab, mode) {
     await download(await captureTab(tab.windowId), `${base}.png`);
     return {};
   }
-  // página que rola por dentro de um painel: printToPDF e captureBeyondViewport só pegam a parte visível
-  const inner = await inTab(tab.id, findScroller).catch(() => false);
   if (mode === 'pdf') {
-    if (!inner) {
-      try {
-        const { data } = await withDebugger(tab.id, (send) =>
-          send('Page.printToPDF', { printBackground: true, preferCSSPageSize: true })
-        );
-        await download(`data:application/pdf;base64,${data}`, `${base}.pdf`);
-        return {};
-      } catch (e) {
-        console.info('printToPDF indisponível, usando captura por rolagem', e);
-      }
-    }
     await download(await canvasToPdf(await stitchFullPage(tab)), `${base}.pdf`);
-    return { note: inner ? NOTE_INNER_PDF : NOTE_IMAGE_PDF };
+    return { note: NOTE_IMAGE_PDF };
   }
   if (mode === 'png') {
-    if (!inner) {
-      try {
-        const { data } = await withDebugger(tab.id, async (send) => {
-          const m = await send('Page.getLayoutMetrics');
-          const content = m.cssContentSize || m.contentSize;
-          const width = Math.ceil(content.width);
-          const height = Math.min(Math.ceil(content.height), MAX_SHOT);
-          const scale = Math.max(0.5, Math.min(2, MAX_SHOT / height, MAX_SHOT / width));
-          return send('Page.captureScreenshot', {
-            format: 'png',
-            captureBeyondViewport: true,
-            clip: { x: 0, y: 0, width, height, scale },
-          });
-        });
-        await download(`data:image/png;base64,${data}`, `${base}.png`);
-        return {};
-      } catch (e) {
-        console.info('captureScreenshot indisponível, usando captura por rolagem', e);
-      }
-    }
     const canvas = await stitchFullPage(tab);
     await download(await blobToDataUrl(await canvas.convertToBlob({ type: 'image/png' })), `${base}.png`);
     return {};
@@ -472,7 +427,6 @@ function friendlyError(e) {
   if (/cannot (access|attach|be scripted)|chrome:\/\/|extensions gallery|webstore|comet:\/\/|policy/i.test(msg)) {
     return 'O navegador não permite extensões nesta página (páginas internas, loja ou sites protegidos pelo navegador).';
   }
-  if (/another debugger|already attached/i.test(msg)) return 'Feche o DevTools desta aba e tente de novo.';
   return msg;
 }
 
