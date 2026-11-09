@@ -205,7 +205,7 @@ Bibliotecas incluídas em `lib/`, com suas respectivas licenças:
 | [JSZip](https://github.com/Stuk/jszip) 3.10.1 | Gerar arquivos .zip e .docx | MIT / GPLv3 (usado sob MIT) |
 | [docx-preview](https://github.com/VolodymyrBaydalka/docxjs) 0.3.7 | Exibir documentos Word | Apache-2.0 |
 | [html2canvas](https://github.com/niklasvh/html2canvas) 1.4.1 | Desenhar as páginas do Word para gerar o PDF | MIT |
-| [Tesseract.js](https://github.com/naptha/tesseract.js) 7.0.0 + dados `por`/`eng` (4.0.0_best_int) | OCR do texto da área selecionada (`lib/ocr/`) | Apache-2.0 |
+| [Tesseract.js](https://github.com/naptha/tesseract.js) 7.0.0 + dados `por`/`eng` (4.0.0_best_int) | OCR do texto da área selecionada (`lib/ocr/`; as URLs padrão de CDN foram trocadas por caminhos locais) | Apache-2.0 |
 
 ## 📄 Licença
 

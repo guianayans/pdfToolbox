@@ -42,6 +42,7 @@ PDF Toolbox encontra os PDFs e documentos Word de qualquer página (anexos do Gm
 
 ✂️ CAPTURA DE PÁGINA
 • Selecione uma área da página e salve em PNG, JPG ou PDF, ou copie direto (Ctrl+Shift+S / Cmd+Shift+S)
+• Copie o texto da área selecionada, inclusive de imagens e prints: o texto é lido por OCR no seu computador (português e inglês)
 • Página inteira em PDF ou PNG, rolando até o fim
 • Só a área visível
 
@@ -62,7 +63,7 @@ PDF Toolbox encontra os PDFs e documentos Word de qualquer página (anexos do Gm
 **Finalidade única (Single purpose):**
 
 ```
-Find PDF and Word documents on web pages and let the user view, edit, convert, split and merge them, or save part of the page as an image or PDF, entirely inside the browser.
+Find PDF and Word documents on web pages and let the user view, edit, convert, split and merge them, or save part of the page as an image, PDF or text, entirely inside the browser.
 ```
 
 **Justificativas das permissões:**
@@ -104,7 +105,7 @@ The core feature is detecting PDF and Word documents on any website the user vis
 
 **Código remoto:** Não, não uso código remoto.
 ```
-All JavaScript, including libraries (pdf.js, pdf-lib, JSZip, html2canvas, docx-preview), is bundled in the package. No code is fetched or evaluated at runtime.
+All JavaScript and WebAssembly, including libraries (pdf.js, pdf-lib, JSZip, html2canvas, docx-preview, Tesseract.js with its OCR language data), is bundled in the package. No code is fetched or evaluated at runtime. The 'wasm-unsafe-eval' CSP entry is only used to run the bundled Tesseract OCR WebAssembly; its default CDN URLs were replaced with local extension paths.
 ```
 
 **Uso de dados:** não marcar nenhum tipo de dado coletado. Marcar as 3 declarações:
@@ -129,5 +130,5 @@ https://guianayans.github.io/pdfToolbox/privacidade.html
 
 No envio, há um campo opcional de **instruções de teste**. Cole:
 ```
-No login needed. Open any page with a PDF link (e.g. https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf or a page linking to it). The toolbar badge shows the count; click the icon → "Ferramentas" opens the editor. "Selecionar área" (Ctrl+Shift+S) starts the area capture.
+No login needed. Open any page with a PDF link (e.g. https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf or a page linking to it). The toolbar badge shows the count; click the icon → "Ferramentas" opens the editor. "Selecionar área" (Ctrl+Shift+S) starts the area capture; after selecting, "Texto" copies the text in the area (OCR runs locally if the area is an image).
 ```
